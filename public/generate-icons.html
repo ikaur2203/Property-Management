@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PWA Icon Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .icon-preview {
+            display: inline-block;
+            margin: 10px;
+            text-align: center;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #5a67d8;
+        }
+        .instructions {
+            background: #e6fffa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            border-left: 4px solid #38b2ac;
+        }
+        .download-btn {
+            background: #38a169;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+            text-decoration: none;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🏠 PWA Icon Generator</h1>
+        <p>This tool generates all the icons needed for your Property Management PWA.</p>
+        
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Click "Generate All Icons" below</li>
+                <li>Click "Download" button under each icon</li>
+                <li>Save them in your <code>public/icons/</code> folder with the exact filenames shown</li>
+                <li>Create the folder: <code>public/icons/</code> if it doesn't exist</li>
+            </ol>
+        </div>
+        
+        <button onclick="generateIcons()">Generate All Icons</button>
+        <button onclick="downloadAll()">Download All as Files</button>
+        
+        <div id="iconContainer"></div>
+    </div>
+
+    <script>
+        const iconSizes = [16, 32, 72, 96, 128, 144, 152, 192, 384, 512];
+        
+        function generateIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // Create gradient background
+            const gradient = ctx.createLinearGradient(0, 0, size, size);
+            gradient.addColorStop(0, '#667eea');
+            gradient.addColorStop(1, '#764ba2');
+            
+            // Draw background
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Add rounded corners
+            ctx.globalCompositeOperation = 'destination-in';
+            ctx.beginPath();
+            ctx.roundRect(0, 0, size, size, size * 0.1);
+            ctx.fill();
+            
+            // Reset composite operation
+            ctx.globalCompositeOperation = 'source-over';
+            
+            // Draw a simple house icon instead of emoji (more reliable)
+            ctx.fillStyle = 'white';
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = size * 0.02;
+            
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const houseSize = size * 0.5;
+            
+            // Draw house base
+            const baseWidth = houseSize * 0.8;
+            const baseHeight = houseSize * 0.6;
+            const baseX = centerX - baseWidth / 2;
+            const baseY = centerY + houseSize * 0.1;
+            
+            ctx.fillRect(baseX, baseY, baseWidth, baseHeight);
+            
+            // Draw roof
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY - houseSize * 0.3);
+            ctx.lineTo(baseX - baseWidth * 0.1, baseY);
+            ctx.lineTo(baseX + baseWidth + baseWidth * 0.1, baseY);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw door
+            const doorWidth = baseWidth * 0.25;
+            const doorHeight = baseHeight * 0.6;
+            const doorX = centerX - doorWidth / 2;
+            const doorY = baseY + baseHeight - doorHeight;
+            
+            ctx.fillStyle = '#667eea';
+            ctx.fillRect(doorX, doorY, doorWidth, doorHeight);
+            
+            // Draw window
+            const windowSize = baseWidth * 0.15;
+            const windowX = baseX + baseWidth * 0.15;
+            const windowY = baseY + baseHeight * 0.2;
+            
+            ctx.fillStyle = '#667eea';
+            ctx.fillRect(windowX, windowY, windowSize, windowSize);
+            
+            return canvas;
+        }
+        
+        function downloadCanvas(canvas, filename) {
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+        
+        function generateIcons() {
+            const container = document.getElementById('iconContainer');
+            container.innerHTML = '<h3>Generated Icons:</h3>';
+            
+            iconSizes.forEach(size => {
+                const iconDiv = document.createElement('div');
+                iconDiv.className = 'icon-preview';
+                
+                const canvas = generateIcon(size);
+                canvas.style.border = '2px solid #ddd';
+                canvas.style.borderRadius = '8px';
+                canvas.style.margin = '5px';
+                canvas.style.display = 'block';
+                
+                const filename = `icon-${size}x${size}.png`;
+                
+                const downloadBtn = document.createElement('button');
+                downloadBtn.textContent = 'Download';
+                downloadBtn.className = 'download-btn';
+                downloadBtn.onclick = () => downloadCanvas(canvas, filename);
+                
+                iconDiv.appendChild(canvas);
+                iconDiv.innerHTML += `<br><small>${filename}</small><br>`;
+                iconDiv.appendChild(downloadBtn);
+                
+                container.appendChild(iconDiv);
+            });
+        }
+        
+        function downloadAll() {
+            iconSizes.forEach(size => {
+                setTimeout(() => {
+                    const canvas = generateIcon(size);
+                    downloadCanvas(canvas, `icon-${size}x${size}.png`);
+                }, size); // Small delay to prevent browser blocking
+            });
+        }
+        
+        // Auto-generate on page load
+        window.addEventListener('load', generateIcons);
+    </script>
+</body>
+</html>

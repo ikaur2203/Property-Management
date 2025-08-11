@@ -1,0 +1,1682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Property Management Dashboard</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Manage your properties, tenants, leases, and expenses with this comprehensive property management dashboard">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="PropManager">
+    <meta name="msapplication-TileColor" content="#667eea">
+    <meta name="msapplication-TileImage" content="/icons/icon-144x144.png">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="/icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/icons/icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-192x192.png">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/icon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-16x16.png">
+    
+    <!-- Preload critical resources -->
+    <link rel="preload" href="/api/dashboard" as="fetch" crossorigin="anonymous">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            color: #4a5568;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #718096;
+            font-size: 1.1rem;
+        }
+        
+        .nav-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 15px;
+            padding: 10px;
+            margin-bottom: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            overflow-x: auto;
+        }
+        
+        .nav-tab {
+            flex: 1;
+            padding: 15px 20px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            border-radius: 10px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            white-space: nowrap;
+            min-width: 120px;
+        }
+        
+        .nav-tab.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .nav-tab:hover:not(.active) {
+            background: rgba(102, 126, 234, 0.1);
+        }
+        
+        .tab-content {
+            display: none;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4a5568;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            background: white;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #e53e3e, #c53030);
+        }
+        
+        .btn-danger:hover {
+            box-shadow: 0 10px 25px rgba(229, 62, 62, 0.4);
+        }
+        
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .data-table th,
+        .data-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        
+        .data-table th {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-weight: 600;
+        }
+        
+        .data-table tr:hover {
+            background: rgba(102, 126, 234, 0.05);
+        }
+        
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+        
+        .status-active {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        .status-expired {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+        
+        .status-ending-soon {
+            background: #fef5e7;
+            color: #744210;
+        }
+        
+        .status-available {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        
+        .status-occupied {
+            background: #bee3f8;
+            color: #2a4365;
+        }
+        
+        .status-maintenance,
+        .status-under-maintenance {
+            background: #fef5e7;
+            color: #744210;
+        }
+        
+        .status-no-lease {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+        
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .summary-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            border-left: 5px solid #667eea;
+        }
+        
+        .summary-card h3 {
+            color: #4a5568;
+            margin-bottom: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .summary-card .amount {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background: white;
+            margin: 50px auto;
+            padding: 30px;
+            width: 90%;
+            max-width: 600px;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: modalSlideIn 0.3s ease;
+        }
+        
+        @keyframes modalSlideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .close {
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+            color: #999;
+        }
+        
+        .close:hover {
+            color: #333;
+        }
+        
+        .search-box {
+            width: 100%;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+            border: 2px solid #e2e8f0;
+            border-radius: 12px;
+            font-size: 16px;
+        }
+        
+        .search-box:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 40px;
+            color: #718096;
+            font-size: 1.1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .data-table {
+                font-size: 14px;
+            }
+            
+            .data-table th,
+            .data-table td {
+                padding: 10px 8px;
+            }
+        }
+        
+        /* PWA specific styles */
+        .pwa-install-prompt {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px 20px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 1001;
+            animation: slideUp 0.3s ease;
+        }
+        
+        .pwa-install-prompt.show {
+            display: flex;
+        }
+        
+        @keyframes slideUp {
+            from { transform: translateY(100px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        
+        .pwa-install-text {
+            flex: 1;
+            margin-right: 15px;
+        }
+        
+        .pwa-install-text h4 {
+            margin: 0 0 5px 0;
+            font-size: 16px;
+        }
+        
+        .pwa-install-text p {
+            margin: 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .pwa-install-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .pwa-btn {
+            padding: 8px 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        .pwa-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.5);
+        }
+        
+        .pwa-btn.primary {
+            background: rgba(255, 255, 255, 0.9);
+            color: #667eea;
+            border-color: transparent;
+        }
+        
+        .pwa-btn.primary:hover {
+            background: white;
+        }
+        
+        .offline-indicator {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #e53e3e;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            display: none;
+            z-index: 1002;
+            animation: fadeIn 0.3s ease;
+        }
+        
+        .offline-indicator.show {
+            display: block;
+        }
+        
+        .offline-indicator.online {
+            background: #38a169;
+        }
+        
+        @media (max-width: 768px) {
+            .pwa-install-prompt {
+                bottom: 10px;
+                left: 10px;
+                right: 10px;
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .pwa-install-text {
+                margin-right: 0;
+                margin-bottom: 15px;
+            }
+            
+            .pwa-install-buttons {
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏠 Property Management Dashboard</h1>
+            <p>Manage your properties, tenants, and finances all in one place</p>
+        </div>
+        
+        <div class="nav-tabs">
+            <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
+            <button class="nav-tab" onclick="showTab('properties')">Properties</button>
+            <button class="nav-tab" onclick="showTab('tenants')">Tenants</button>
+            <button class="nav-tab" onclick="showTab('leases')">Leases</button>
+            <button class="nav-tab" onclick="showTab('expenses')">Expenses</button>
+            <button class="nav-tab" onclick="showTab('reports')">Reports</button>
+        </div>
+        
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content active">
+            <div class="summary-cards">
+                <div class="summary-card">
+                    <h3>Total Properties</h3>
+                    <div class="amount" id="totalProperties">0</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Active Tenants</h3>
+                    <div class="amount" id="activeTenants">0</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Monthly Rent Income</h3>
+                    <div class="amount" id="monthlyRent">$0</div>
+                </div>
+                <div class="summary-card">
+                    <h3>Monthly Expenses</h3>
+                    <div class="amount" id="monthlyExpenses">$0</div>
+                </div>
+            </div>
+            
+            <h2>Recent Activity</h2>
+            <div id="recentActivity">
+                <div class="no-data">No recent activity to display</div>
+            </div>
+        </div>
+        
+        <!-- Properties Tab -->
+        <div id="properties" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Properties Management</h2>
+                <button class="btn" onclick="openPropertyModal()">Add New Property</button>
+            </div>
+            
+            <input type="text" class="search-box" placeholder="Search properties..." onkeyup="filterTable('propertiesTable', this.value)">
+            
+            <table class="data-table" id="propertiesTable">
+                <thead>
+                    <tr>
+                        <th>Address</th>
+                        <th>Type</th>
+                        <th>Purchase Price</th>
+                        <th>Monthly Mortgage</th>
+                        <th>Current Value</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="propertiesTableBody">
+                    <tr>
+                        <td colspan="7" class="no-data">No properties added yet</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Tenants Tab -->
+        <div id="tenants" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Tenants Management</h2>
+                <button class="btn" onclick="openTenantModal()">Add New Tenant</button>
+            </div>
+            
+            <input type="text" class="search-box" placeholder="Search tenants..." onkeyup="filterTable('tenantsTable', this.value)">
+            
+            <table class="data-table" id="tenantsTable">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Property</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Rent Amount</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tenantsTableBody">
+                    <tr>
+                        <td colspan="7" class="no-data">No tenants added yet</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Leases Tab -->
+        <div id="leases" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Lease Management</h2>
+                <button class="btn" onclick="openLeaseModal()">Add New Lease</button>
+            </div>
+            
+            <input type="text" class="search-box" placeholder="Search leases..." onkeyup="filterTable('leasesTable', this.value)">
+            
+            <table class="data-table" id="leasesTable">
+                <thead>
+                    <tr>
+                        <th>Tenant</th>
+                        <th>Property</th>
+                        <th>Start Date</th>
+                        <th>End Date</th>
+                        <th>Rent Amount</th>
+                        <th>Security Deposit</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="leasesTableBody">
+                    <tr>
+                        <td colspan="8" class="no-data">No leases added yet</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Expenses Tab -->
+        <div id="expenses" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Expenses Management</h2>
+                <button class="btn" onclick="openExpenseModal()">Add New Expense</button>
+            </div>
+            
+            <input type="text" class="search-box" placeholder="Search expenses..." onkeyup="filterTable('expensesTable', this.value)">
+            
+            <table class="data-table" id="expensesTable">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Property</th>
+                        <th>Category</th>
+                        <th>Description</th>
+                        <th>Amount</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="expensesTableBody">
+                    <tr>
+                        <td colspan="6" class="no-data">No expenses added yet</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Reports Tab -->
+        <div id="reports" class="tab-content">
+            <h2>Financial Reports</h2>
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Report Period</label>
+                    <select id="reportPeriod">
+                        <option value="thisMonth">This Month</option>
+                        <option value="lastMonth">Last Month</option>
+                        <option value="thisYear">This Year</option>
+                        <option value="custom">Custom Range</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <button class="btn" onclick="generateReport()">Generate Report</button>
+                </div>
+            </div>
+            
+            <div id="reportResults">
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <h3>Total Income</h3>
+                        <div class="amount" id="reportIncome">$0</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Total Expenses</h3>
+                        <div class="amount" id="reportExpenses">$0</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Net Profit</h3>
+                        <div class="amount" id="reportProfit">$0</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>ROI</h3>
+                        <div class="amount" id="reportROI">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Property Modal -->
+    <div id="propertyModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('propertyModal')">&times;</span>
+            <h2>Add/Edit Property</h2>
+            <form onsubmit="saveProperty(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Address*</label>
+                        <input type="text" id="propertyAddress" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Property Type*</label>
+                        <select id="propertyType" required>
+                            <option value="">Select Type</option>
+                            <option value="Single Family">Single Family</option>
+                            <option value="2-Family">2-Family</option>
+                            <option value="3-Family">3-Family</option>
+                            <option value="Apartment">Apartment</option>
+                            <option value="Condo">Condo</option>
+                            <option value="Townhouse">Townhouse</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Purchase Price*</label>
+                        <input type="number" id="propertyPurchasePrice" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Current Value</label>
+                        <input type="number" id="propertyCurrentValue" step="0.01">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Monthly Mortgage Payment</label>
+                        <input type="number" id="propertyMortgage" step="0.01">
+                    </div>
+                    <div class="form-group">
+                        <label>Property Status</label>
+                        <select id="propertyStatus">
+                            <option value="Available">Available</option>
+                            <option value="Occupied">Occupied</option>
+                            <option value="Maintenance">Under Maintenance</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="propertyNotes" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn">Save Property</button>
+                <button type="button" class="btn" onclick="closeModal('propertyModal')">Cancel</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Tenant Modal -->
+    <div id="tenantModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('tenantModal')">&times;</span>
+            <h2>Add/Edit Tenant</h2>
+            <form onsubmit="saveTenant(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Full Name*</label>
+                        <input type="text" id="tenantName" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone*</label>
+                        <input type="tel" id="tenantPhone" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Email*</label>
+                        <input type="email" id="tenantEmail" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Property</label>
+                        <select id="tenantProperty">
+                            <option value="">Select Property</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Emergency Contact</label>
+                        <input type="text" id="tenantEmergencyContact">
+                    </div>
+                    <div class="form-group">
+                        <label>Emergency Phone</label>
+                        <input type="tel" id="tenantEmergencyPhone">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="tenantNotes" rows="3"></textarea>
+                </div>
+                <button type="submit" class="btn">Save Tenant</button>
+                <button type="button" class="btn" onclick="closeModal('tenantModal')">Cancel</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Lease Modal -->
+    <div id="leaseModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('leaseModal')">&times;</span>
+            <h2>Add/Edit Lease</h2>
+            <form onsubmit="saveLease(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Tenant*</label>
+                        <select id="leaseTenant" required>
+                            <option value="">Select Tenant</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Property*</label>
+                        <select id="leaseProperty" required>
+                            <option value="">Select Property</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Start Date*</label>
+                        <input type="date" id="leaseStartDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>End Date*</label>
+                        <input type="date" id="leaseEndDate" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Monthly Rent*</label>
+                        <input type="number" id="leaseRent" step="0.01" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Security Deposit</label>
+                        <input type="number" id="leaseDeposit" step="0.01">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Lease Terms</label>
+                    <textarea id="leaseTerms" rows="4"></textarea>
+                </div>
+                <button type="submit" class="btn">Save Lease</button>
+                <button type="button" class="btn" onclick="closeModal('leaseModal')">Cancel</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Expense Modal -->
+    <div id="expenseModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('expenseModal')">&times;</span>
+            <h2>Add/Edit Expense</h2>
+            <form onsubmit="saveExpense(event)">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Date*</label>
+                        <input type="date" id="expenseDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Property</label>
+                        <select id="expenseProperty">
+                            <option value="">Select Property</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Category*</label>
+                        <select id="expenseCategory" required>
+                            <option value="">Select Category</option>
+                            <option value="Maintenance">Maintenance</option>
+                            <option value="Repairs">Repairs</option>
+                            <option value="Water Bill">Water Bill</option>
+                            <option value="Insurance">Insurance</option>
+                            <option value="Property Tax">Property Tax</option>
+                            <option value="Mortgage">Mortgage Payment</option>
+                            <option value="Legal">Legal Fees</option>
+                            <option value="Advertising">Advertising</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Amount*</label>
+                        <input type="number" id="expenseAmount" step="0.01" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description*</label>
+                    <textarea id="expenseDescription" rows="3" required></textarea>
+                </div>
+                <button type="submit" class="btn">Save Expense</button>
+                <button type="button" class="btn" onclick="closeModal('expenseModal')">Cancel</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- PWA Install Prompt -->
+    <div id="pwaInstallPrompt" class="pwa-install-prompt">
+        <div class="pwa-install-text">
+            <h4>🏠 Install Property Manager</h4>
+            <p>Get quick access to your property management dashboard</p>
+        </div>
+        <div class="pwa-install-buttons">
+            <button class="pwa-btn primary" id="pwaInstallBtn">Install</button>
+            <button class="pwa-btn" id="pwaLaterBtn">Later</button>
+        </div>
+    </div>
+    
+    <!-- Offline Indicator -->
+    <div id="offlineIndicator" class="offline-indicator">
+        <span id="offlineText">You're offline</span>
+    </div>
+    
+    <script>
+        // Global data storage
+        let properties = [];
+        let tenants = [];
+        let leases = [];
+        let expenses = [];
+        let currentEditId = null;
+        
+        // API Base URL
+        const API_BASE = '/api';
+        
+        // Initialize the app
+        document.addEventListener('DOMContentLoaded', function() {
+            loadData();
+            setDefaultDate();
+            initializePWA();
+            handleShortcuts();
+        });
+        
+        // PWA Initialization
+        function initializePWA() {
+            // Register service worker
+            if ('serviceWorker' in navigator) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('/sw.js')
+                        .then(registration => {
+                            console.log('SW registered: ', registration);
+                        })
+                        .catch(registrationError => {
+                            console.log('SW registration failed: ', registrationError);
+                        });
+                });
+            }
+            
+            // Handle install prompt
+            let deferredPrompt;
+            const installPrompt = document.getElementById('pwaInstallPrompt');
+            const installBtn = document.getElementById('pwaInstallBtn');
+            const laterBtn = document.getElementById('pwaLaterBtn');
+            
+            window.addEventListener('beforeinstallprompt', (e) => {
+                // Prevent Chrome 67 and earlier from automatically showing the prompt
+                e.preventDefault();
+                // Stash the event so it can be triggered later
+                deferredPrompt = e;
+                // Show our custom install prompt
+                installPrompt.classList.add('show');
+            });
+            
+            installBtn.addEventListener('click', async () => {
+                if (deferredPrompt) {
+                    // Show the install prompt
+                    deferredPrompt.prompt();
+                    // Wait for the user to respond to the prompt
+                    const { outcome } = await deferredPrompt.userChoice;
+                    console.log(`User response to the install prompt: ${outcome}`);
+                    // Clear the deferred prompt variable
+                    deferredPrompt = null;
+                }
+                // Hide the install prompt
+                installPrompt.classList.remove('show');
+            });
+            
+            laterBtn.addEventListener('click', () => {
+                installPrompt.classList.remove('show');
+                // Don't show again for this session
+                sessionStorage.setItem('pwaPromptDismissed', 'true');
+            });
+            
+            // Don't show prompt if already dismissed this session
+            if (sessionStorage.getItem('pwaPromptDismissed')) {
+                installPrompt.style.display = 'none';
+            }
+            
+            // Handle app installation
+            window.addEventListener('appinstalled', (evt) => {
+                console.log('App was installed');
+                installPrompt.classList.remove('show');
+            });
+            
+            // Network status handling
+            handleNetworkStatus();
+        }
+        
+        // Handle network status
+        function handleNetworkStatus() {
+            const offlineIndicator = document.getElementById('offlineIndicator');
+            const offlineText = document.getElementById('offlineText');
+            
+            function updateOnlineStatus() {
+                if (navigator.onLine) {
+                    offlineIndicator.classList.remove('show');
+                    offlineIndicator.classList.add('online');
+                    offlineText.textContent = "You're back online!";
+                    setTimeout(() => {
+                        offlineIndicator.classList.remove('show', 'online');
+                    }, 3000);
+                } else {
+                    offlineIndicator.classList.add('show');
+                    offlineIndicator.classList.remove('online');
+                    offlineText.textContent = "You're offline";
+                }
+            }
+            
+            window.addEventListener('online', updateOnlineStatus);
+            window.addEventListener('offline', updateOnlineStatus);
+            
+            // Initial check
+            updateOnlineStatus();
+        }
+        
+        // Handle PWA shortcuts
+        function handleShortcuts() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const action = urlParams.get('action');
+            
+            if (action) {
+                setTimeout(() => {
+                    switch (action) {
+                        case 'add-property':
+                            showTab('properties');
+                            setTimeout(() => openPropertyModal(), 300);
+                            break;
+                        case 'add-tenant':
+                            showTab('tenants');
+                            setTimeout(() => openTenantModal(), 300);
+                            break;
+                        case 'add-expense':
+                            showTab('expenses');
+                            setTimeout(() => openExpenseModal(), 300);
+                            break;
+                    }
+                    
+                    // Clean up URL
+                    window.history.replaceState({}, document.title, '/');
+                }, 500);
+            }
+        }
+        
+        // Set default date for expense form
+        function setDefaultDate() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('expenseDate').value = today;
+        }
+        
+        // API Helper functions with better error handling
+        async function apiRequest(url, options = {}) {
+            try {
+                console.log(`API Request: ${options.method || 'GET'} ${API_BASE + url}`);
+                
+                const response = await fetch(API_BASE + url, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+                
+                console.log(`API Response: ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
+                }
+                
+                const data = await response.json();
+                console.log('API Data:', data);
+                
+                // Handle offline responses
+                if (data.offline) {
+                    throw new Error('Offline - using cached data');
+                }
+                
+                return data;
+            } catch (error) {
+                console.error('API request failed:', error);
+                
+                // More specific error handling
+                if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    alert('Cannot connect to server. Please make sure the server is running on port 3000.');
+                } else if (error.message.includes('HTTP 404')) {
+                    alert('API endpoint not found. Please check the server configuration.');
+                } else if (error.message.includes('HTTP 500')) {
+                    alert('Server error. Please check the server logs for details.');
+                } else if (!navigator.onLine) {
+                    alert('You appear to be offline. Please check your internet connection.');
+                } else {
+                    alert(`Operation failed: ${error.message}`);
+                }
+                
+                throw error;
+            }
+        }
+        
+        // Data loading functions
+        async function loadData() {
+            try {
+                await Promise.all([
+                    loadProperties(),
+                    loadTenants(),
+                    loadLeases(),
+                    loadExpenses()
+                ]);
+                updateDashboard();
+            } catch (error) {
+                console.error('Failed to load data:', error);
+            }
+        }
+        
+        async function loadProperties() {
+            properties = await apiRequest('/properties');
+            renderPropertiesTable();
+        }
+        
+        async function loadTenants() {
+            tenants = await apiRequest('/tenants');
+            renderTenantsTable();
+        }
+        
+        async function loadLeases() {
+            leases = await apiRequest('/leases');
+            renderLeasesTable();
+        }
+        
+        async function loadExpenses() {
+            expenses = await apiRequest('/expenses');
+            renderExpensesTable();
+        }
+        
+        async function loadDashboardData() {
+            try {
+                const dashboardData = await apiRequest('/dashboard');
+                document.getElementById('totalProperties').textContent = dashboardData.totalProperties;
+                document.getElementById('activeTenants').textContent = dashboardData.activeTenants;
+                document.getElementById('monthlyRent').textContent = formatCurrency(dashboardData.monthlyRent);
+                document.getElementById('monthlyExpenses').textContent = formatCurrency(dashboardData.monthlyExpenses);
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error);
+            }
+        }
+        
+        // Tab functionality
+        function showTab(tabName) {
+            // Hide all tabs
+            const tabs = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Remove active class from all nav tabs
+            const navTabs = document.querySelectorAll('.nav-tab');
+            navTabs.forEach(tab => tab.classList.remove('active'));
+            
+            // Show selected tab
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+            
+            // Update dropdowns when showing certain tabs
+            if (tabName === 'tenants' || tabName === 'leases' || tabName === 'expenses') {
+                updatePropertyDropdowns();
+            }
+            if (tabName === 'leases') {
+                updateTenantDropdowns();
+            }
+        }
+        
+        // Modal functions updated for database IDs
+        function openPropertyModal(id = null) {
+            currentEditId = id;
+            if (id) {
+                const property = properties.find(p => p.id === id);
+                if (property) {
+                    document.getElementById('propertyAddress').value = property.address;
+                    document.getElementById('propertyType').value = property.type;
+                    document.getElementById('propertyPurchasePrice').value = property.purchase_price;
+                    document.getElementById('propertyCurrentValue').value = property.current_value;
+                    document.getElementById('propertyMortgage').value = property.mortgage;
+                    document.getElementById('propertyStatus').value = property.status;
+                    document.getElementById('propertyNotes').value = property.notes || '';
+                }
+            } else {
+                document.getElementById('propertyModal').querySelector('form').reset();
+            }
+            document.getElementById('propertyModal').style.display = 'block';
+        }
+        
+        function openTenantModal(id = null) {
+            currentEditId = id;
+            updatePropertyDropdowns();
+            if (id) {
+                const tenant = tenants.find(t => t.id === id);
+                if (tenant) {
+                    document.getElementById('tenantName').value = tenant.name;
+                    document.getElementById('tenantPhone').value = tenant.phone;
+                    document.getElementById('tenantEmail').value = tenant.email;
+                    document.getElementById('tenantProperty').value = tenant.property_id || '';
+                    document.getElementById('tenantEmergencyContact').value = tenant.emergency_contact || '';
+                    document.getElementById('tenantEmergencyPhone').value = tenant.emergency_phone || '';
+                    document.getElementById('tenantNotes').value = tenant.notes || '';
+                }
+            } else {
+                document.getElementById('tenantModal').querySelector('form').reset();
+            }
+            document.getElementById('tenantModal').style.display = 'block';
+        }
+        
+        function openLeaseModal(id = null) {
+            currentEditId = id;
+            updatePropertyDropdowns();
+            updateTenantDropdowns();
+            if (id) {
+                const lease = leases.find(l => l.id === id);
+                if (lease) {
+                    document.getElementById('leaseTenant').value = lease.tenant_id;
+                    document.getElementById('leaseProperty').value = lease.property_id;
+                    document.getElementById('leaseStartDate').value = lease.start_date;
+                    document.getElementById('leaseEndDate').value = lease.end_date;
+                    document.getElementById('leaseRent').value = lease.rent;
+                    document.getElementById('leaseDeposit').value = lease.deposit;
+                    document.getElementById('leaseTerms').value = lease.terms || '';
+                }
+            } else {
+                document.getElementById('leaseModal').querySelector('form').reset();
+            }
+            document.getElementById('leaseModal').style.display = 'block';
+        }
+        
+        function openExpenseModal(id = null) {
+            currentEditId = id;
+            updatePropertyDropdowns();
+            if (id) {
+                const expense = expenses.find(e => e.id === id);
+                if (expense) {
+                    document.getElementById('expenseDate').value = expense.date;
+                    document.getElementById('expenseProperty').value = expense.property_id || '';
+                    document.getElementById('expenseCategory').value = expense.category;
+                    document.getElementById('expenseAmount').value = expense.amount;
+                    document.getElementById('expenseDescription').value = expense.description;
+                }
+            } else {
+                document.getElementById('expenseModal').querySelector('form').reset();
+                setDefaultDate();
+            }
+            document.getElementById('expenseModal').style.display = 'block';
+        }
+        
+        function closeModal(modalId) {
+            document.getElementById(modalId).style.display = 'none';
+            currentEditId = null;
+        }
+        
+        // Update dropdown options
+        function updatePropertyDropdowns() {
+            const selects = ['tenantProperty', 'leaseProperty', 'expenseProperty'];
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                if (select) {
+                    const currentValue = select.value;
+                    select.innerHTML = '<option value="">Select Property</option>';
+                    properties.forEach(property => {
+                        const option = document.createElement('option');
+                        option.value = property.id;
+                        option.textContent = property.address;
+                        select.appendChild(option);
+                    });
+                    select.value = currentValue;
+                }
+            });
+        }
+        
+        function updateTenantDropdowns() {
+            const select = document.getElementById('leaseTenant');
+            if (select) {
+                const currentValue = select.value;
+                select.innerHTML = '<option value="">Select Tenant</option>';
+                tenants.forEach(tenant => {
+                    const option = document.createElement('option');
+                    option.value = tenant.id;
+                    option.textContent = tenant.name;
+                    select.appendChild(option);
+                });
+                select.value = currentValue;
+            }
+        }
+        
+        // Save functions
+        async function saveProperty(event) {
+            event.preventDefault();
+            
+            const propertyData = {
+                address: document.getElementById('propertyAddress').value,
+                type: document.getElementById('propertyType').value,
+                purchase_price: parseFloat(document.getElementById('propertyPurchasePrice').value),
+                current_value: parseFloat(document.getElementById('propertyCurrentValue').value) || 0,
+                mortgage: parseFloat(document.getElementById('propertyMortgage').value) || 0,
+                status: document.getElementById('propertyStatus').value,
+                notes: document.getElementById('propertyNotes').value
+            };
+            
+            try {
+                if (currentEditId) {
+                    await apiRequest(`/properties/${currentEditId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(propertyData)
+                    });
+                } else {
+                    await apiRequest('/properties', {
+                        method: 'POST',
+                        body: JSON.stringify(propertyData)
+                    });
+                }
+                
+                await loadProperties();
+                updateDashboard();
+                closeModal('propertyModal');
+            } catch (error) {
+                console.error('Failed to save property:', error);
+            }
+        }
+        
+        async function saveTenant(event) {
+            event.preventDefault();
+            
+            const tenantData = {
+                name: document.getElementById('tenantName').value,
+                phone: document.getElementById('tenantPhone').value,
+                email: document.getElementById('tenantEmail').value,
+                property_id: document.getElementById('tenantProperty').value || null,
+                emergency_contact: document.getElementById('tenantEmergencyContact').value,
+                emergency_phone: document.getElementById('tenantEmergencyPhone').value,
+                notes: document.getElementById('tenantNotes').value
+            };
+            
+            try {
+                if (currentEditId) {
+                    await apiRequest(`/tenants/${currentEditId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(tenantData)
+                    });
+                } else {
+                    await apiRequest('/tenants', {
+                        method: 'POST',
+                        body: JSON.stringify(tenantData)
+                    });
+                }
+                
+                await loadTenants();
+                updateDashboard();
+                closeModal('tenantModal');
+            } catch (error) {
+                console.error('Failed to save tenant:', error);
+            }
+        }
+        
+        async function saveLease(event) {
+            event.preventDefault();
+            
+            const leaseData = {
+                tenant_id: parseInt(document.getElementById('leaseTenant').value),
+                property_id: parseInt(document.getElementById('leaseProperty').value),
+                start_date: document.getElementById('leaseStartDate').value,
+                end_date: document.getElementById('leaseEndDate').value,
+                rent: parseFloat(document.getElementById('leaseRent').value),
+                deposit: parseFloat(document.getElementById('leaseDeposit').value) || 0,
+                terms: document.getElementById('leaseTerms').value
+            };
+            
+            try {
+                if (currentEditId) {
+                    await apiRequest(`/leases/${currentEditId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(leaseData)
+                    });
+                } else {
+                    await apiRequest('/leases', {
+                        method: 'POST',
+                        body: JSON.stringify(leaseData)
+                    });
+                }
+                
+                await loadLeases();
+                updateDashboard();
+                closeModal('leaseModal');
+            } catch (error) {
+                console.error('Failed to save lease:', error);
+            }
+        }
+        
+        async function saveExpense(event) {
+            event.preventDefault();
+            
+            const expenseData = {
+                date: document.getElementById('expenseDate').value,
+                property_id: document.getElementById('expenseProperty').value || null,
+                category: document.getElementById('expenseCategory').value,
+                amount: parseFloat(document.getElementById('expenseAmount').value),
+                description: document.getElementById('expenseDescription').value
+            };
+            
+            try {
+                if (currentEditId) {
+                    await apiRequest(`/expenses/${currentEditId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(expenseData)
+                    });
+                } else {
+                    await apiRequest('/expenses', {
+                        method: 'POST',
+                        body: JSON.stringify(expenseData)
+                    });
+                }
+                
+                await loadExpenses();
+                updateDashboard();
+                closeModal('expenseModal');
+            } catch (error) {
+                console.error('Failed to save expense:', error);
+            }
+        }
+        
+        // Delete functions
+        async function deleteProperty(id) {
+            if (confirm('Are you sure you want to delete this property?')) {
+                try {
+                    await apiRequest(`/properties/${id}`, { method: 'DELETE' });
+                    await loadProperties();
+                    updateDashboard();
+                } catch (error) {
+                    console.error('Failed to delete property:', error);
+                }
+            }
+        }
+        
+        async function deleteTenant(id) {
+            if (confirm('Are you sure you want to delete this tenant?')) {
+                try {
+                    await apiRequest(`/tenants/${id}`, { method: 'DELETE' });
+                    await loadTenants();
+                    updateDashboard();
+                } catch (error) {
+                    console.error('Failed to delete tenant:', error);
+                }
+            }
+        }
+        
+        async function deleteLease(id) {
+            if (confirm('Are you sure you want to delete this lease?')) {
+                try {
+                    await apiRequest(`/leases/${id}`, { method: 'DELETE' });
+                    await loadLeases();
+                    updateDashboard();
+                } catch (error) {
+                    console.error('Failed to delete lease:', error);
+                }
+            }
+        }
+        
+        async function deleteExpense(id) {
+            if (confirm('Are you sure you want to delete this expense?')) {
+                try {
+                    await apiRequest(`/expenses/${id}`, { method: 'DELETE' });
+                    await loadExpenses();
+                    updateDashboard();
+                } catch (error) {
+                    console.error('Failed to delete expense:', error);
+                }
+            }
+        }
+        
+        // Render table functions
+        function renderPropertiesTable() {
+            const tbody = document.getElementById('propertiesTableBody');
+            tbody.innerHTML = '';
+            
+            if (properties.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="no-data">No properties added yet</td></tr>';
+                return;
+            }
+            
+            properties.forEach(property => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${property.address}</td>
+                    <td>${property.type}</td>
+                    <td>${property.purchase_price.toLocaleString()}</td>
+                    <td>${property.mortgage.toLocaleString()}</td>
+                    <td>${property.current_value.toLocaleString()}</td>
+                    <td><span class="status-badge status-${property.status.toLowerCase().replace(' ', '-')}">${property.status}</span></td>
+                    <td>
+                        <button class="btn" onclick="openPropertyModal(${property.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteProperty(${property.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function renderTenantsTable() {
+            const tbody = document.getElementById('tenantsTableBody');
+            tbody.innerHTML = '';
+            
+            if (tenants.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="no-data">No tenants added yet</td></tr>';
+                return;
+            }
+            
+            tenants.forEach(tenant => {
+                const propertyAddress = tenant.property_address || 'No Property Assigned';
+                const lease = leases.find(l => l.tenant_id === tenant.id);
+                const rentAmount = lease ? `${lease.rent.toLocaleString()}` : 'No Lease';
+                const status = lease ? getLeaseStatus(lease) : 'No Lease';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${tenant.name}</td>
+                    <td>${propertyAddress}</td>
+                    <td>${tenant.phone}</td>
+                    <td>${tenant.email}</td>
+                    <td>${rentAmount}</td>
+                    <td><span class="status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span></td>
+                    <td>
+                        <button class="btn" onclick="openTenantModal(${tenant.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteTenant(${tenant.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function renderLeasesTable() {
+            const tbody = document.getElementById('leasesTableBody');
+            tbody.innerHTML = '';
+            
+            if (leases.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="8" class="no-data">No leases added yet</td></tr>';
+                return;
+            }
+            
+            leases.forEach(lease => {
+                const tenantName = lease.tenant_name || 'Unknown Tenant';
+                const propertyAddress = lease.property_address || 'Unknown Property';
+                const status = getLeaseStatus(lease);
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${tenantName}</td>
+                    <td>${propertyAddress}</td>
+                    <td>${formatDate(lease.start_date)}</td>
+                    <td>${formatDate(lease.end_date)}</td>
+                    <td>${lease.rent.toLocaleString()}</td>
+                    <td>${lease.deposit.toLocaleString()}</td>
+                    <td><span class="status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span></td>
+                    <td>
+                        <button class="btn" onclick="openLeaseModal(${lease.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteLease(${lease.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        function renderExpensesTable() {
+            const tbody = document.getElementById('expensesTableBody');
+            tbody.innerHTML = '';
+            
+            if (expenses.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="no-data">No expenses added yet</td></tr>';
+                return;
+            }
+            
+            expenses.forEach(expense => {
+                const propertyAddress = expense.property_address || 'General Expense';
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${formatDate(expense.date)}</td>
+                    <td>${propertyAddress}</td>
+                    <td>${expense.category}</td>
+                    <td>${expense.description}</td>
+                    <td>${expense.amount.toLocaleString()}</td>
+                    <td>
+                        <button class="btn" onclick="openExpenseModal(${expense.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteExpense(${expense.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Utility functions
+        function getLeaseStatus(lease) {
+            const today = new Date();
+            const endDate = new Date(lease.end_date);
+            const daysUntilEnd = Math.ceil((endDate - today) / (1000 * 60 * 60 * 24));
+            
+            if (daysUntilEnd < 0) {
+                return 'Expired';
+            } else if (daysUntilEnd <= 30) {
+                return 'Ending Soon';
+            } else {
+                return 'Active';
+            }
+        }
+        
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString();
+        }
+        
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('en-US', {
+                style: 'currency',
+                currency: 'USD'
+            }).format(amount);
+        }
+        
+        // Dashboard update
+        function updateDashboard() {
+            loadDashboardData();
+        }
+        
+        // Search/Filter functionality
+        function filterTable(tableId, searchTerm) {
+            const table = document.getElementById(tableId);
+            const rows = table.getElementsByTagName('tr');
+            
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                const cells = row.getElementsByTagName('td');
+                let found = false;
+                
+                for (let j = 0; j < cells.length; j++) {
+                    const cellText = cells[j].textContent.toLowerCase();
+                    if (cellText.includes(searchTerm.toLowerCase())) {
+                        found = true;
+                        break;
+                    }
+                }
+                
+                row.style.display = found ? '' : 'none';
+            }
+        }
+        
+        // Report generation
+        async function generateReport() {
+            const period = document.getElementById('reportPeriod').value;
+            
+            try {
+                const reportData = await apiRequest(`/reports?period=${period}`);
+                
+                document.getElementById('reportIncome').textContent = formatCurrency(reportData.totalIncome);
+                document.getElementById('reportExpenses').textContent = formatCurrency(reportData.totalExpenses);
+                document.getElementById('reportProfit').textContent = formatCurrency(reportData.netProfit);
+                document.getElementById('reportROI').textContent = reportData.roi + '%';
+            } catch (error) {
+                console.error('Failed to generate report:', error);
+            }
+        }
+        
+        // Close modals when clicking outside
+        window.onclick = function(event) {
+            const modals = document.querySelectorAll('.modal');
+            modals.forEach(modal => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                    currentEditId = null;
+                }
+            });
+        }
+    </script>
+</body>
+</html>
