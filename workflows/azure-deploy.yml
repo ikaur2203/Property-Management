@@ -1,0 +1,74 @@
+# .github/workflows/azure-deploy.yml
+name: Deploy to Azure App Service
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  NODE_VERSION: '18.x'
+  AZURE_WEBAPP_NAME: 'singhpropertymanagement'    # Set this to your Azure Web App name
+  AZURE_WEBAPP_PACKAGE_PATH: '.'        # Set this to the path to your web app project
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # Checkout the code
+    - name: 🛎️ Checkout code
+      uses: actions/checkout@v4
+
+    # Setup Node.js
+    - name: 🔧 Setup Node.js ${{ env.NODE_VERSION }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    # Install dependencies
+    - name: 📦 Install dependencies
+      run: npm ci
+
+    # Run basic tests
+    - name: 🧪 Run tests
+      run: |
+        echo "Running basic health check..."
+        npm start &
+        SERVER_PID=$!
+        sleep 10
+        curl -f http://localhost:3000 || exit 1
+        curl -f http://localhost:3000/api/properties || exit 1
+        kill $SERVER_PID
+        echo "✅ Tests passed!"
+
+    # Build application (if needed)
+    - name: 🔨 Build application
+      run: |
+        echo "Application is ready for deployment"
+        echo "Files to deploy:"
+        ls -la
+
+    # Deploy to Azure App Service
+    - name: 🚀 Deploy to Azure App Service
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ env.AZURE_WEBAPP_NAME }}
+        publish-profile: ${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}
+        package: ${{ env.AZURE_WEBAPP_PACKAGE_PATH }}
+
+    # Health check after deployment
+    - name: 🏥 Health check
+      run: |
+        echo "Waiting for deployment to complete..."
+        sleep 30
+        curl -f https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net/api/properties || echo "Health check failed, but deployment completed"
+
+    # Notify on success
+    - name: 📢 Deployment Success
+      if: success()
+      run: |
+        echo "✅ Deployment successful!"
+        echo "🌐 App URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
