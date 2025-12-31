@@ -1,7 +1,7 @@
 {
   "name": "property-management-app",
   "version": "1.0.0",
-  "description": "A property management application with SQLite database - Azure App Service Ready",
+  "description": "A property management application with Azure SQL Database - Azure App Service Ready",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -13,7 +13,7 @@
   "keywords": [
     "property-management",
     "real-estate",
-    "sqlite",
+    "azure-sql",
     "nodejs",
     "express",
     "azure",
@@ -22,9 +22,11 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
+    "@azure/storage-blob": "^12.29.1",
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "sqlite3": "^5.1.6",
-    "cors": "^2.8.5"
+    "mssql": "^11.0.1",
+    "multer": "^2.0.2"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"
