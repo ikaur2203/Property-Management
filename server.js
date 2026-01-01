@@ -1,4 +1,5 @@
 // server.js - Node.js Express server with Azure SQL Database
+require('dotenv').config();
 const express = require('express');
 const sql = require('mssql');
 const cors = require('cors');
@@ -69,19 +70,94 @@ async function initializeDatabase() {
 async function createTables() {
     const pool = await poolPromise;
 
-    // Properties table
+    // Companies/LLCs table (must be created before properties)
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='companies' AND xtype='U')
+        CREATE TABLE companies (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            name NVARCHAR(255) NOT NULL,
+            notes NVARCHAR(MAX),
+            created_at DATETIME2 DEFAULT GETDATE()
+        )
+    `);
+
+    // Properties table (with separate address fields)
     await pool.request().query(`
         IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='properties' AND xtype='U')
         CREATE TABLE properties (
             id INT IDENTITY(1,1) PRIMARY KEY,
-            address NVARCHAR(500) NOT NULL,
+            address1 NVARCHAR(255) NOT NULL,
+            city NVARCHAR(100) NOT NULL,
+            state NVARCHAR(50) NOT NULL,
+            zip NVARCHAR(20) NOT NULL,
             type NVARCHAR(100) NOT NULL,
-            purchase_price DECIMAL(18,2) NOT NULL,
-            current_value DECIMAL(18,2),
+            company_id INT,
             status NVARCHAR(50) NOT NULL DEFAULT 'available',
             notes NVARCHAR(MAX),
-            created_at DATETIME2 DEFAULT GETDATE()
+            created_at DATETIME2 DEFAULT GETDATE(),
+            FOREIGN KEY (company_id) REFERENCES companies(id)
         )
+    `);
+
+    // Add company_id column to existing properties table if it doesn't exist
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'company_id')
+        ALTER TABLE properties ADD company_id INT NULL
+    `);
+
+    // Add notes column to existing properties table if it doesn't exist
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'notes')
+        ALTER TABLE properties ADD notes NVARCHAR(MAX) NULL
+    `);
+
+    // Drop old columns from properties table if they exist (purchase_price, current_value, monthly_mortgage)
+    await pool.request().query(`
+        IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'purchase_price')
+        ALTER TABLE properties DROP COLUMN purchase_price
+    `);
+    await pool.request().query(`
+        IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'current_value')
+        ALTER TABLE properties DROP COLUMN current_value
+    `);
+    await pool.request().query(`
+        IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'monthly_mortgage')
+        ALTER TABLE properties DROP COLUMN monthly_mortgage
+    `);
+
+    // Add new address fields to existing properties table
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'address1')
+        ALTER TABLE properties ADD address1 NVARCHAR(255) NULL
+    `);
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'city')
+        ALTER TABLE properties ADD city NVARCHAR(100) NULL
+    `);
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'state')
+        ALTER TABLE properties ADD state NVARCHAR(50) NULL
+    `);
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'zip')
+        ALTER TABLE properties ADD zip NVARCHAR(20) NULL
+    `);
+
+    // Migrate data from old 'address' column to new fields if address column exists
+    await pool.request().query(`
+        IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'address')
+        BEGIN
+            UPDATE properties SET address1 = address WHERE address1 IS NULL AND address IS NOT NULL
+            UPDATE properties SET city = '' WHERE city IS NULL
+            UPDATE properties SET state = '' WHERE state IS NULL
+            UPDATE properties SET zip = '' WHERE zip IS NULL
+        END
+    `);
+
+    // Drop old address column if it exists (after migration)
+    await pool.request().query(`
+        IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'address')
+        ALTER TABLE properties DROP COLUMN address
     `);
 
     // Tenants table
@@ -123,19 +199,27 @@ async function createTables() {
         )
     `);
 
-    // Expenses table
+    // Expenses table (with company_id for company-level expenses like mortgages)
     await pool.request().query(`
         IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='expenses' AND xtype='U')
         CREATE TABLE expenses (
             id INT IDENTITY(1,1) PRIMARY KEY,
             date DATE NOT NULL,
             property_id INT,
+            company_id INT,
             category NVARCHAR(100) NOT NULL,
             amount DECIMAL(18,2) NOT NULL,
             description NVARCHAR(500) NOT NULL,
             created_at DATETIME2 DEFAULT GETDATE(),
-            FOREIGN KEY (property_id) REFERENCES properties(id)
+            FOREIGN KEY (property_id) REFERENCES properties(id),
+            FOREIGN KEY (company_id) REFERENCES companies(id)
         )
+    `);
+
+    // Add company_id column to existing expenses table if it doesn't exist
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('expenses') AND name = 'company_id')
+        ALTER TABLE expenses ADD company_id INT NULL
     `);
 
     // Rent Payments table
@@ -212,11 +296,75 @@ app.get('/sw.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'sw.js'));
 });
 
+// ==================== COMPANIES ROUTES ====================
+app.get('/api/companies', async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request().query('SELECT * FROM companies ORDER BY name ASC');
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/companies', async (req, res) => {
+    const { name, notes } = req.body;
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('name', sql.NVarChar, name)
+            .input('notes', sql.NVarChar, notes || '')
+            .query(`INSERT INTO companies (name, notes)
+                    OUTPUT INSERTED.id
+                    VALUES (@name, @notes)`);
+
+        res.json({ id: result.recordset[0].id, message: 'Company created successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.put('/api/companies/:id', async (req, res) => {
+    const { name, notes } = req.body;
+    const { id } = req.params;
+    try {
+        const pool = await poolPromise;
+        await pool.request()
+            .input('id', sql.Int, id)
+            .input('name', sql.NVarChar, name)
+            .input('notes', sql.NVarChar, notes || '')
+            .query(`UPDATE companies SET name = @name, notes = @notes WHERE id = @id`);
+
+        res.json({ message: 'Company updated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.delete('/api/companies/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const pool = await poolPromise;
+        await pool.request()
+            .input('id', sql.Int, id)
+            .query('DELETE FROM companies WHERE id = @id');
+
+        res.json({ message: 'Company deleted successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ==================== PROPERTIES ROUTES ====================
 app.get('/api/properties', async (req, res) => {
     try {
         const pool = await poolPromise;
-        const result = await pool.request().query('SELECT * FROM properties ORDER BY created_at DESC');
+        const result = await pool.request().query(`
+            SELECT p.*, c.name as company_name
+            FROM properties p
+            LEFT JOIN companies c ON p.company_id = c.id
+            ORDER BY p.created_at DESC
+        `);
         res.json(result.recordset);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -224,42 +372,46 @@ app.get('/api/properties', async (req, res) => {
 });
 
 app.post('/api/properties', async (req, res) => {
-    const { address, type, purchase_price, current_value, status, notes } = req.body;
+    const { address1, city, state, zip, type, company_id, status, notes } = req.body;
     try {
         const pool = await poolPromise;
         const result = await pool.request()
-            .input('address', sql.NVarChar, address)
+            .input('address1', sql.NVarChar, address1)
+            .input('city', sql.NVarChar, city)
+            .input('state', sql.NVarChar, state)
+            .input('zip', sql.NVarChar, zip)
             .input('type', sql.NVarChar, type)
-            .input('purchase_price', sql.Decimal(18, 2), purchase_price)
-            .input('current_value', sql.Decimal(18, 2), current_value || null)
+            .input('company_id', sql.Int, company_id || null)
             .input('status', sql.NVarChar, status)
             .input('notes', sql.NVarChar, notes || '')
-            .query(`INSERT INTO properties (address, type, purchase_price, current_value, status, notes)
+            .query(`INSERT INTO properties (address1, city, state, zip, type, company_id, status, notes)
                     OUTPUT INSERTED.id
-                    VALUES (@address, @type, @purchase_price, @current_value, @status, @notes)`);
+                    VALUES (@address1, @city, @state, @zip, @type, @company_id, @status, @notes)`);
 
         res.json({ id: result.recordset[0].id, message: 'Property created successfully' });
     } catch (err) {
+        console.error('Error creating property:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
 app.put('/api/properties/:id', async (req, res) => {
-    const { address, type, purchase_price, current_value, status, notes } = req.body;
+    const { address1, city, state, zip, type, company_id, status, notes } = req.body;
     const { id } = req.params;
     try {
         const pool = await poolPromise;
         await pool.request()
             .input('id', sql.Int, id)
-            .input('address', sql.NVarChar, address)
+            .input('address1', sql.NVarChar, address1)
+            .input('city', sql.NVarChar, city)
+            .input('state', sql.NVarChar, state)
+            .input('zip', sql.NVarChar, zip)
             .input('type', sql.NVarChar, type)
-            .input('purchase_price', sql.Decimal(18, 2), purchase_price)
-            .input('current_value', sql.Decimal(18, 2), current_value || null)
+            .input('company_id', sql.Int, company_id || null)
             .input('status', sql.NVarChar, status)
             .input('notes', sql.NVarChar, notes || '')
-            .query(`UPDATE properties SET address = @address, type = @type,
-                    purchase_price = @purchase_price, current_value = @current_value,
-                    status = @status, notes = @notes WHERE id = @id`);
+            .query(`UPDATE properties SET address1 = @address1, city = @city, state = @state, zip = @zip,
+                    type = @type, company_id = @company_id, status = @status, notes = @notes WHERE id = @id`);
 
         res.json({ message: 'Property updated successfully' });
     } catch (err) {
@@ -286,7 +438,7 @@ app.get('/api/tenants', async (req, res) => {
     try {
         const pool = await poolPromise;
         const result = await pool.request().query(`
-            SELECT t.*, p.address as property_address
+            SELECT t.*, p.address1 as property_address
             FROM tenants t
             LEFT JOIN properties p ON t.property_id = p.id
             ORDER BY t.created_at DESC
@@ -364,7 +516,7 @@ app.get('/api/leases', async (req, res) => {
     try {
         const pool = await poolPromise;
         const result = await pool.request().query(`
-            SELECT l.*, t.name as tenant_name, p.address as property_address
+            SELECT l.*, t.name as tenant_name, p.address1 as property_address
             FROM leases l
             LEFT JOIN tenants t ON l.tenant_id = t.id
             LEFT JOIN properties p ON l.property_id = p.id
@@ -569,9 +721,10 @@ app.get('/api/expenses', async (req, res) => {
     try {
         const pool = await poolPromise;
         const result = await pool.request().query(`
-            SELECT e.*, p.address as property_address
+            SELECT e.*, p.address1 as property_address, c.name as company_name
             FROM expenses e
             LEFT JOIN properties p ON e.property_id = p.id
+            LEFT JOIN companies c ON e.company_id = c.id
             ORDER BY e.date DESC
         `);
         res.json(result.recordset);
@@ -581,18 +734,19 @@ app.get('/api/expenses', async (req, res) => {
 });
 
 app.post('/api/expenses', async (req, res) => {
-    const { date, property_id, category, amount, description } = req.body;
+    const { date, property_id, company_id, category, amount, description } = req.body;
     try {
         const pool = await poolPromise;
         const result = await pool.request()
             .input('date', sql.Date, date)
             .input('property_id', sql.Int, property_id || null)
+            .input('company_id', sql.Int, company_id || null)
             .input('category', sql.NVarChar, category)
             .input('amount', sql.Decimal(18, 2), amount)
             .input('description', sql.NVarChar, description)
-            .query(`INSERT INTO expenses (date, property_id, category, amount, description)
+            .query(`INSERT INTO expenses (date, property_id, company_id, category, amount, description)
                     OUTPUT INSERTED.id
-                    VALUES (@date, @property_id, @category, @amount, @description)`);
+                    VALUES (@date, @property_id, @company_id, @category, @amount, @description)`);
 
         res.json({ id: result.recordset[0].id, message: 'Expense created successfully' });
     } catch (err) {
@@ -601,7 +755,7 @@ app.post('/api/expenses', async (req, res) => {
 });
 
 app.put('/api/expenses/:id', async (req, res) => {
-    const { date, property_id, category, amount, description } = req.body;
+    const { date, property_id, company_id, category, amount, description } = req.body;
     const { id } = req.params;
     try {
         const pool = await poolPromise;
@@ -609,12 +763,13 @@ app.put('/api/expenses/:id', async (req, res) => {
             .input('id', sql.Int, id)
             .input('date', sql.Date, date)
             .input('property_id', sql.Int, property_id || null)
+            .input('company_id', sql.Int, company_id || null)
             .input('category', sql.NVarChar, category)
             .input('amount', sql.Decimal(18, 2), amount)
             .input('description', sql.NVarChar, description)
             .query(`UPDATE expenses SET date = @date, property_id = @property_id,
-                    category = @category, amount = @amount, description = @description
-                    WHERE id = @id`);
+                    company_id = @company_id, category = @category, amount = @amount,
+                    description = @description WHERE id = @id`);
 
         res.json({ message: 'Expense updated successfully' });
     } catch (err) {
@@ -642,14 +797,18 @@ app.get('/api/payments', async (req, res) => {
     try {
         const pool = await poolPromise;
         let query = `SELECT p.*, t.name as tenant_name, t.phone as tenant_phone,
-                     pr.address as property_address, l.rent as expected_rent
+                     pr.address1 as property_address, l.rent as expected_rent
                      FROM rent_payments p
                      LEFT JOIN tenants t ON p.tenant_id = t.id
                      LEFT JOIN leases l ON l.tenant_id = p.tenant_id AND l.end_date >= CAST(GETDATE() AS DATE)
                      LEFT JOIN properties pr ON l.property_id = pr.id`;
 
         if (month && year) {
+            // Filter by specific month and year
             query += ` WHERE MONTH(p.payment_date) = @month AND YEAR(p.payment_date) = @year`;
+        } else if (year) {
+            // Filter by year only (for yearly view)
+            query += ` WHERE YEAR(p.payment_date) = @year`;
         }
 
         query += ' ORDER BY p.payment_date DESC';
@@ -658,10 +817,106 @@ app.get('/api/payments', async (req, res) => {
         if (month && year) {
             request.input('month', sql.Int, parseInt(month));
             request.input('year', sql.Int, parseInt(year));
+        } else if (year) {
+            request.input('year', sql.Int, parseInt(year));
         }
 
         const result = await request.query(query);
         res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get payment summary - MUST be before /:id route
+app.get('/api/payments/summary', async (req, res) => {
+    const { month, year } = req.query;
+    const today = new Date();
+    const currentYear = year || today.getFullYear();
+    const isYearlyView = year && !month;
+
+    try {
+        const pool = await poolPromise;
+
+        // Get total expected rent (multiply by 12 for yearly view)
+        const expectedResult = await pool.request()
+            .query(`SELECT SUM(rent) as expected_total FROM leases WHERE end_date >= CAST(GETDATE() AS DATE)`);
+
+        let collectedResult, methodsResult;
+
+        if (isYearlyView) {
+            // Yearly view - get all payments for the year
+            collectedResult = await pool.request()
+                .input('year', sql.Int, parseInt(currentYear))
+                .query(`SELECT SUM(amount) as collected_total, COUNT(*) as payment_count
+                        FROM rent_payments
+                        WHERE YEAR(payment_date) = @year`);
+
+            methodsResult = await pool.request()
+                .input('year', sql.Int, parseInt(currentYear))
+                .query(`SELECT payment_method, SUM(amount) as total, COUNT(*) as count
+                        FROM rent_payments
+                        WHERE YEAR(payment_date) = @year
+                        GROUP BY payment_method`);
+        } else {
+            // Monthly view
+            const currentMonth = month || (today.getMonth() + 1);
+
+            collectedResult = await pool.request()
+                .input('month', sql.Int, parseInt(currentMonth))
+                .input('year', sql.Int, parseInt(currentYear))
+                .query(`SELECT SUM(amount) as collected_total, COUNT(*) as payment_count
+                        FROM rent_payments
+                        WHERE MONTH(payment_date) = @month AND YEAR(payment_date) = @year`);
+
+            methodsResult = await pool.request()
+                .input('month', sql.Int, parseInt(currentMonth))
+                .input('year', sql.Int, parseInt(currentYear))
+                .query(`SELECT payment_method, SUM(amount) as total, COUNT(*) as count
+                        FROM rent_payments
+                        WHERE MONTH(payment_date) = @month AND YEAR(payment_date) = @year
+                        GROUP BY payment_method`);
+        }
+
+        const expected = expectedResult.recordset[0];
+        const collected = collectedResult.recordset[0];
+
+        // For yearly view, multiply expected by 12 (months in a year)
+        const expectedTotal = isYearlyView
+            ? (expected.expected_total || 0) * 12
+            : (expected.expected_total || 0);
+
+        res.json({
+            expectedTotal: expectedTotal,
+            collectedTotal: collected.collected_total || 0,
+            paymentCount: collected.payment_count || 0,
+            outstanding: expectedTotal - (collected.collected_total || 0),
+            paymentMethods: methodsResult.recordset
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get single payment by ID
+app.get('/api/payments/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('id', sql.Int, id)
+            .query(`SELECT p.*, t.name as tenant_name, t.phone as tenant_phone,
+                    pr.address1 as property_address, l.rent as expected_rent
+                    FROM rent_payments p
+                    LEFT JOIN tenants t ON p.tenant_id = t.id
+                    LEFT JOIN leases l ON l.tenant_id = p.tenant_id AND l.end_date >= CAST(GETDATE() AS DATE)
+                    LEFT JOIN properties pr ON l.property_id = pr.id
+                    WHERE p.id = @id`);
+
+        if (result.recordset.length === 0) {
+            return res.status(404).json({ error: 'Payment not found' });
+        }
+        res.json(result.recordset[0]);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -727,52 +982,6 @@ app.delete('/api/payments/:id', async (req, res) => {
     }
 });
 
-// Get payment summary for dashboard
-app.get('/api/payments/summary', async (req, res) => {
-    const { month, year } = req.query;
-    const today = new Date();
-    const currentMonth = month || (today.getMonth() + 1);
-    const currentYear = year || today.getFullYear();
-
-    try {
-        const pool = await poolPromise;
-
-        // Get total expected rent
-        const expectedResult = await pool.request()
-            .query(`SELECT SUM(rent) as expected_total FROM leases WHERE end_date >= CAST(GETDATE() AS DATE)`);
-
-        // Get total collected
-        const collectedResult = await pool.request()
-            .input('month', sql.Int, parseInt(currentMonth))
-            .input('year', sql.Int, parseInt(currentYear))
-            .query(`SELECT SUM(amount) as collected_total, COUNT(*) as payment_count
-                    FROM rent_payments
-                    WHERE MONTH(payment_date) = @month AND YEAR(payment_date) = @year`);
-
-        // Get payment methods breakdown
-        const methodsResult = await pool.request()
-            .input('month', sql.Int, parseInt(currentMonth))
-            .input('year', sql.Int, parseInt(currentYear))
-            .query(`SELECT payment_method, SUM(amount) as total, COUNT(*) as count
-                    FROM rent_payments
-                    WHERE MONTH(payment_date) = @month AND YEAR(payment_date) = @year
-                    GROUP BY payment_method`);
-
-        const expected = expectedResult.recordset[0];
-        const collected = collectedResult.recordset[0];
-
-        res.json({
-            expectedTotal: expected.expected_total || 0,
-            collectedTotal: collected.collected_total || 0,
-            paymentCount: collected.payment_count || 0,
-            outstanding: (expected.expected_total || 0) - (collected.collected_total || 0),
-            paymentMethods: methodsResult.recordset
-        });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
 // ==================== DASHBOARD/REPORTS ROUTES ====================
 app.get('/api/dashboard', async (req, res) => {
     try {
@@ -783,7 +992,14 @@ app.get('/api/dashboard', async (req, res) => {
 
         // Get all dashboard stats
         const propertiesCount = await pool.request().query('SELECT COUNT(*) as total_properties FROM properties');
-        const tenantsCount = await pool.request().query('SELECT COUNT(*) as total_tenants FROM tenants');
+
+        // Count tenants with active leases (lease end_date >= today)
+        const activeTenantsCount = await pool.request()
+            .query(`SELECT COUNT(DISTINCT t.id) as active_tenants
+                    FROM tenants t
+                    INNER JOIN leases l ON t.id = l.tenant_id
+                    WHERE l.end_date >= CAST(GETDATE() AS DATE)`);
+
         const activeLeases = await pool.request()
             .query(`SELECT COUNT(*) as active_leases FROM leases WHERE end_date >= CAST(GETDATE() AS DATE)`);
         const monthlyRent = await pool.request()
@@ -799,7 +1015,7 @@ app.get('/api/dashboard', async (req, res) => {
 
         res.json({
             totalProperties: propertiesCount.recordset[0].total_properties,
-            totalTenants: tenantsCount.recordset[0].total_tenants,
+            activeTenants: activeTenantsCount.recordset[0].active_tenants,
             activeLeases: activeLeases.recordset[0].active_leases,
             monthlyRent: monthlyRent.recordset[0].monthly_rent || 0,
             monthlyExpenses: monthlyExpenses.recordset[0].monthly_expenses || 0,

@@ -299,10 +299,12 @@
         
         .modal-content {
             background: white;
-            margin: 50px auto;
+            margin: 20px auto;
             padding: 30px;
             width: 90%;
             max-width: 600px;
+            max-height: 90vh;
+            overflow-y: auto;
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
             animation: modalSlideIn 0.3s ease;
@@ -497,6 +499,7 @@
         
         <div class="nav-tabs">
             <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
+            <button class="nav-tab" onclick="showTab('companies')">Companies</button>
             <button class="nav-tab" onclick="showTab('properties')">Properties</button>
             <button class="nav-tab" onclick="showTab('tenants')">Tenants</button>
             <button class="nav-tab" onclick="showTab('leases')">Leases</button>
@@ -532,30 +535,54 @@
             </div>
         </div>
         
+        <!-- Companies Tab -->
+        <div id="companies" class="tab-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2>Companies/LLCs Management</h2>
+                <button class="btn" onclick="openCompanyModal()">Add New Company</button>
+            </div>
+
+            <input type="text" class="search-box" placeholder="Search companies..." onkeyup="filterTable('companiesTable', this.value)">
+
+            <table class="data-table" id="companiesTable">
+                <thead>
+                    <tr>
+                        <th>Company Name</th>
+                        <th>Properties</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="companiesTableBody">
+                    <tr>
+                        <td colspan="4" class="no-data">No companies added yet</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
         <!-- Properties Tab -->
         <div id="properties" class="tab-content">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h2>Properties Management</h2>
                 <button class="btn" onclick="openPropertyModal()">Add New Property</button>
             </div>
-            
+
             <input type="text" class="search-box" placeholder="Search properties..." onkeyup="filterTable('propertiesTable', this.value)">
-            
+
             <table class="data-table" id="propertiesTable">
                 <thead>
                     <tr>
                         <th>Address</th>
                         <th>Type</th>
-                        <th>Purchase Price</th>
-                        <th>Monthly Mortgage</th>
-                        <th>Current Value</th>
+                        <th>Company/LLC</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="propertiesTableBody">
                     <tr>
-                        <td colspan="7" class="no-data">No properties added yet</td>
+                        <td colspan="5" class="no-data">No properties added yet</td>
                     </tr>
                 </tbody>
             </table>
@@ -577,7 +604,6 @@
                         <th>Property</th>
                         <th>Floor/Unit</th>
                         <th>Phone</th>
-                        <th>Email</th>
                         <th>Rent Amount</th>
                         <th>Status</th>
                         <th>Actions</th>
@@ -585,7 +611,7 @@
                 </thead>
                 <tbody id="tenantsTableBody">
                     <tr>
-                        <td colspan="8" class="no-data">No tenants added yet</td>
+                        <td colspan="7" class="no-data">No tenants added yet</td>
                     </tr>
                 </tbody>
             </table>
@@ -649,14 +675,22 @@
                 </div>
             </div>
 
-            <!-- Month Filter -->
-            <div class="form-row" style="margin-bottom: 20px;">
-                <div class="form-group">
-                    <label>Month</label>
-                    <input type="month" id="paymentMonth" onchange="loadPayments()">
+            <!-- View Toggle and Filter -->
+            <div class="form-row" style="margin-bottom: 20px; align-items: flex-end;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>View</label>
+                    <select id="paymentViewType" onchange="togglePaymentView()">
+                        <option value="month">Monthly</option>
+                        <option value="year">Yearly</option>
+                    </select>
                 </div>
-                <div class="form-group">
-                    <button class="btn" onclick="setCurrentMonth()">Current Month</button>
+                <div class="form-group" id="monthFilterGroup" style="margin-bottom: 0;">
+                    <label>Month</label>
+                    <input type="month" id="paymentMonth" onchange="loadPayments(); loadPaymentSummary();">
+                </div>
+                <div class="form-group" id="yearFilterGroup" style="margin-bottom: 0; display: none;">
+                    <label>Year</label>
+                    <select id="paymentYear" onchange="loadPayments(); loadPaymentSummary();"></select>
                 </div>
             </div>
 
@@ -696,7 +730,7 @@
                 <thead>
                     <tr>
                         <th>Date</th>
-                        <th>Property</th>
+                        <th>Property/Company</th>
                         <th>Category</th>
                         <th>Description</th>
                         <th>Amount</th>
@@ -753,17 +787,60 @@
         </div>
     </div>
     
+    <!-- Company Modal -->
+    <div id="companyModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('companyModal')">&times;</span>
+            <h2>Add/Edit Company/LLC</h2>
+            <form onsubmit="saveCompany(event)">
+                <div class="form-group">
+                    <label>Company Name*</label>
+                    <input type="text" id="companyName" required placeholder="e.g., 149th Ave LLC">
+                </div>
+                <div class="form-group">
+                    <label>Notes</label>
+                    <textarea id="companyNotes" rows="3" placeholder="Additional information about this company..."></textarea>
+                </div>
+                <button type="submit" class="btn">Save Company</button>
+                <button type="button" class="btn" onclick="closeModal('companyModal')">Cancel</button>
+            </form>
+        </div>
+    </div>
+
     <!-- Property Modal -->
     <div id="propertyModal" class="modal">
         <div class="modal-content">
             <span class="close" onclick="closeModal('propertyModal')">&times;</span>
             <h2>Add/Edit Property</h2>
             <form onsubmit="saveProperty(event)">
+                <div class="form-group">
+                    <label>Street Address*</label>
+                    <input type="text" id="propertyAddress1" required placeholder="e.g., 12409 149th Avenue">
+                </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label>Address*</label>
-                        <input type="text" id="propertyAddress" required>
+                        <label>City*</label>
+                        <input type="text" id="propertyCity" required placeholder="e.g., South Ozone Park">
                     </div>
+                    <div class="form-group">
+                        <label>State*</label>
+                        <select id="propertyState" required>
+                            <option value="">Select State</option>
+                            <option value="NY">New York</option>
+                            <option value="NJ">New Jersey</option>
+                            <option value="CT">Connecticut</option>
+                            <option value="PA">Pennsylvania</option>
+                            <option value="FL">Florida</option>
+                            <option value="CA">California</option>
+                            <option value="TX">Texas</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>ZIP*</label>
+                        <input type="text" id="propertyZip" required placeholder="e.g., 11420" maxlength="10">
+                    </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label>Property Type*</label>
                         <select id="propertyType" required>
@@ -776,22 +853,14 @@
                             <option value="Townhouse">Townhouse</option>
                         </select>
                     </div>
-                </div>
-                <div class="form-row">
                     <div class="form-group">
-                        <label>Purchase Price*</label>
-                        <input type="number" id="propertyPurchasePrice" step="0.01" required>
-                    </div>
-                    <div class="form-group">
-                        <label>Current Value</label>
-                        <input type="number" id="propertyCurrentValue" step="0.01">
+                        <label>Company/LLC</label>
+                        <select id="propertyCompany">
+                            <option value="">No Company (Personal)</option>
+                        </select>
                     </div>
                 </div>
                 <div class="form-row">
-                    <div class="form-group">
-                        <label>Monthly Mortgage Payment</label>
-                        <input type="number" id="propertyMortgage" step="0.01">
-                    </div>
                     <div class="form-group">
                         <label>Property Status</label>
                         <select id="propertyStatus">
@@ -997,16 +1066,8 @@
                         <input type="date" id="expenseDate" required>
                     </div>
                     <div class="form-group">
-                        <label>Property</label>
-                        <select id="expenseProperty">
-                            <option value="">Select Property</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
                         <label>Category*</label>
-                        <select id="expenseCategory" required>
+                        <select id="expenseCategory" required onchange="toggleExpenseAssignment()">
                             <option value="">Select Category</option>
                             <option value="Maintenance">Maintenance</option>
                             <option value="Repairs">Repairs</option>
@@ -1019,6 +1080,30 @@
                             <option value="Other">Other</option>
                         </select>
                     </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Assign To</label>
+                        <select id="expenseAssignmentType" onchange="toggleExpenseAssignment()">
+                            <option value="property">Single Property</option>
+                            <option value="company">Company/LLC (e.g., combined mortgage)</option>
+                            <option value="general">General Expense</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="expensePropertyGroup">
+                        <label>Property</label>
+                        <select id="expenseProperty">
+                            <option value="">Select Property</option>
+                        </select>
+                    </div>
+                    <div class="form-group" id="expenseCompanyGroup" style="display: none;">
+                        <label>Company/LLC</label>
+                        <select id="expenseCompany">
+                            <option value="">Select Company</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-row">
                     <div class="form-group">
                         <label>Amount*</label>
                         <input type="number" id="expenseAmount" step="0.01" required>
@@ -1053,12 +1138,13 @@
     
     <script>
         // Global data storage
+        let companies = [];
         let properties = [];
         let tenants = [];
         let leases = [];
         let expenses = [];
         let currentEditId = null;
-        
+
         // API Base URL
         const API_BASE = '/api';
         
@@ -1249,7 +1335,8 @@
         async function loadData() {
             try {
                 // Load all data in parallel
-                const [propertiesData, tenantsData, leasesData, expensesData] = await Promise.all([
+                const [companiesData, propertiesData, tenantsData, leasesData, expensesData] = await Promise.all([
+                    apiRequest('/companies'),
                     apiRequest('/properties'),
                     apiRequest('/tenants'),
                     apiRequest('/leases'),
@@ -1257,12 +1344,14 @@
                 ]);
 
                 // Assign to global variables
+                companies = companiesData;
                 properties = propertiesData;
                 tenants = tenantsData;
                 leases = leasesData;
                 expenses = expensesData;
 
                 // Now render all tables (leases are guaranteed to be loaded)
+                renderCompaniesTable();
                 renderPropertiesTable();
                 renderTenantsTable();
                 renderLeasesTable();
@@ -1272,6 +1361,11 @@
             } catch (error) {
                 console.error('Failed to load data:', error);
             }
+        }
+
+        async function loadCompanies() {
+            companies = await apiRequest('/companies');
+            renderCompaniesTable();
         }
 
         async function loadProperties() {
@@ -1300,12 +1394,20 @@
 
         async function loadPayments() {
             try {
-                const monthInput = document.getElementById('paymentMonth').value;
+                const viewType = document.getElementById('paymentViewType').value;
                 let url = '/payments';
 
-                if (monthInput) {
-                    const [year, month] = monthInput.split('-');
-                    url = `/payments?month=${month}&year=${year}`;
+                if (viewType === 'year') {
+                    const year = document.getElementById('paymentYear').value;
+                    if (year) {
+                        url = `/payments?year=${year}`;
+                    }
+                } else {
+                    const monthInput = document.getElementById('paymentMonth').value;
+                    if (monthInput) {
+                        const [year, month] = monthInput.split('-');
+                        url = `/payments?month=${month}&year=${year}`;
+                    }
                 }
 
                 const paymentsData = await apiRequest(url);
@@ -1317,12 +1419,26 @@
 
         async function loadPaymentSummary() {
             try {
-                const monthInput = document.getElementById('paymentMonth').value;
+                const viewType = document.getElementById('paymentViewType').value;
                 let url = '/payments/summary';
 
-                if (monthInput) {
-                    const [year, month] = monthInput.split('-');
-                    url = `/payments/summary?month=${month}&year=${year}`;
+                if (viewType === 'year') {
+                    const year = document.getElementById('paymentYear').value;
+                    if (year) {
+                        url = `/payments/summary?year=${year}`;
+                    }
+                    // Update card labels for yearly view
+                    document.querySelector('#expectedRent').parentElement.querySelector('h3').textContent = 'Expected This Year';
+                    document.querySelector('#collectedRent').parentElement.querySelector('h3').textContent = 'Collected This Year';
+                } else {
+                    const monthInput = document.getElementById('paymentMonth').value;
+                    if (monthInput) {
+                        const [year, month] = monthInput.split('-');
+                        url = `/payments/summary?month=${month}&year=${year}`;
+                    }
+                    // Update card labels for monthly view
+                    document.querySelector('#expectedRent').parentElement.querySelector('h3').textContent = 'Expected This Month';
+                    document.querySelector('#collectedRent').parentElement.querySelector('h3').textContent = 'Collected This Month';
                 }
 
                 const summary = await apiRequest(url);
@@ -1332,6 +1448,45 @@
                 document.getElementById('paymentCount').textContent = summary.paymentCount;
             } catch (error) {
                 console.error('Failed to load payment summary:', error);
+            }
+        }
+
+        function togglePaymentView() {
+            const viewType = document.getElementById('paymentViewType').value;
+            const monthGroup = document.getElementById('monthFilterGroup');
+            const yearGroup = document.getElementById('yearFilterGroup');
+
+            if (viewType === 'year') {
+                monthGroup.style.display = 'none';
+                yearGroup.style.display = 'block';
+                initializeYearDropdown();
+            } else {
+                monthGroup.style.display = 'block';
+                yearGroup.style.display = 'none';
+            }
+
+            loadPayments();
+            loadPaymentSummary();
+        }
+
+        function initializeYearDropdown() {
+            const yearSelect = document.getElementById('paymentYear');
+            const currentYear = new Date().getFullYear();
+
+            // Only populate if empty
+            if (yearSelect.options.length === 0) {
+                // Show years from 5 years ago to current year
+                for (let year = currentYear; year >= currentYear - 5; year--) {
+                    const option = document.createElement('option');
+                    option.value = year;
+                    option.textContent = year;
+                    yearSelect.appendChild(option);
+                }
+            }
+
+            // Set to current year if not already set
+            if (!yearSelect.value) {
+                yearSelect.value = currentYear;
             }
         }
 
@@ -1352,18 +1507,22 @@
             // Hide all tabs
             const tabs = document.querySelectorAll('.tab-content');
             tabs.forEach(tab => tab.classList.remove('active'));
-            
+
             // Remove active class from all nav tabs
             const navTabs = document.querySelectorAll('.nav-tab');
             navTabs.forEach(tab => tab.classList.remove('active'));
-            
+
             // Show selected tab
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
 
             // Update dropdowns when showing certain tabs
+            if (tabName === 'properties') {
+                updateCompanyDropdowns();
+            }
             if (tabName === 'tenants' || tabName === 'leases' || tabName === 'expenses') {
                 updatePropertyDropdowns();
+                updateCompanyDropdowns();
             }
             if (tabName === 'leases') {
                 updateTenantDropdowns();
@@ -1374,16 +1533,32 @@
         }
         
         // Modal functions updated for database IDs
+        function openCompanyModal(id = null) {
+            currentEditId = id;
+            if (id) {
+                const company = companies.find(c => c.id === id);
+                if (company) {
+                    document.getElementById('companyName').value = company.name;
+                    document.getElementById('companyNotes').value = company.notes || '';
+                }
+            } else {
+                document.getElementById('companyModal').querySelector('form').reset();
+            }
+            document.getElementById('companyModal').style.display = 'block';
+        }
+
         function openPropertyModal(id = null) {
             currentEditId = id;
+            updateCompanyDropdowns();
             if (id) {
                 const property = properties.find(p => p.id === id);
                 if (property) {
-                    document.getElementById('propertyAddress').value = property.address;
+                    document.getElementById('propertyAddress1').value = property.address1 || '';
+                    document.getElementById('propertyCity').value = property.city || '';
+                    document.getElementById('propertyState').value = property.state || '';
+                    document.getElementById('propertyZip').value = property.zip || '';
                     document.getElementById('propertyType').value = property.type;
-                    document.getElementById('propertyPurchasePrice').value = property.purchase_price;
-                    document.getElementById('propertyCurrentValue').value = property.current_value;
-                    document.getElementById('propertyMortgage').value = property.mortgage;
+                    document.getElementById('propertyCompany').value = property.company_id || '';
                     document.getElementById('propertyStatus').value = property.status;
                     document.getElementById('propertyNotes').value = property.notes || '';
                 }
@@ -1427,8 +1602,8 @@
                 if (lease) {
                     document.getElementById('leaseTenant').value = lease.tenant_id;
                     document.getElementById('leaseProperty').value = lease.property_id;
-                    document.getElementById('leaseStartDate').value = lease.start_date;
-                    document.getElementById('leaseEndDate').value = lease.end_date;
+                    document.getElementById('leaseStartDate').value = lease.start_date ? lease.start_date.split('T')[0] : '';
+                    document.getElementById('leaseEndDate').value = lease.end_date ? lease.end_date.split('T')[0] : '';
                     document.getElementById('leaseRent').value = lease.rent;
                     document.getElementById('leaseDeposit').value = lease.deposit;
                     document.getElementById('leaseTerms').value = lease.terms || '';
@@ -1454,8 +1629,8 @@
                 }
             } else {
                 document.getElementById('leaseModal').querySelector('form').reset();
-                documentSection.style.display = 'none';
-                currentDocumentDiv.innerHTML = '';
+                documentSection.style.display = 'block';
+                currentDocumentDiv.innerHTML = '<p style="color: #718096;">Upload a lease document (optional)</p>';
             }
             document.getElementById('leaseModal').style.display = 'block';
         }
@@ -1463,20 +1638,55 @@
         function openExpenseModal(id = null) {
             currentEditId = id;
             updatePropertyDropdowns();
+            updateCompanyDropdowns();
             if (id) {
                 const expense = expenses.find(e => e.id === id);
                 if (expense) {
-                    document.getElementById('expenseDate').value = expense.date;
-                    document.getElementById('expenseProperty').value = expense.property_id || '';
+                    document.getElementById('expenseDate').value = expense.date ? expense.date.split('T')[0] : '';
                     document.getElementById('expenseCategory').value = expense.category;
                     document.getElementById('expenseAmount').value = expense.amount;
                     document.getElementById('expenseDescription').value = expense.description;
+
+                    // Set assignment type based on what's linked
+                    if (expense.company_id) {
+                        document.getElementById('expenseAssignmentType').value = 'company';
+                        document.getElementById('expenseCompany').value = expense.company_id;
+                        document.getElementById('expenseProperty').value = '';
+                    } else if (expense.property_id) {
+                        document.getElementById('expenseAssignmentType').value = 'property';
+                        document.getElementById('expenseProperty').value = expense.property_id;
+                        document.getElementById('expenseCompany').value = '';
+                    } else {
+                        document.getElementById('expenseAssignmentType').value = 'general';
+                        document.getElementById('expenseProperty').value = '';
+                        document.getElementById('expenseCompany').value = '';
+                    }
+                    toggleExpenseAssignment();
                 }
             } else {
                 document.getElementById('expenseModal').querySelector('form').reset();
                 setDefaultDate();
+                document.getElementById('expenseAssignmentType').value = 'property';
+                toggleExpenseAssignment();
             }
             document.getElementById('expenseModal').style.display = 'block';
+        }
+
+        function toggleExpenseAssignment() {
+            const assignmentType = document.getElementById('expenseAssignmentType').value;
+            const propertyGroup = document.getElementById('expensePropertyGroup');
+            const companyGroup = document.getElementById('expenseCompanyGroup');
+
+            if (assignmentType === 'property') {
+                propertyGroup.style.display = 'block';
+                companyGroup.style.display = 'none';
+            } else if (assignmentType === 'company') {
+                propertyGroup.style.display = 'none';
+                companyGroup.style.display = 'block';
+            } else {
+                propertyGroup.style.display = 'none';
+                companyGroup.style.display = 'none';
+            }
         }
 
         async function openPaymentModal(id = null) {
@@ -1484,28 +1694,32 @@
             await updatePaymentTenantDropdown();
 
             if (id) {
-                // Load existing payment data for editing
-                const monthInput = document.getElementById('paymentMonth').value;
-                let url = '/payments';
-                if (monthInput) {
-                    const [year, month] = monthInput.split('-');
-                    url = `/payments?month=${month}&year=${year}`;
-                }
-                const payments = await apiRequest(url);
-                const payment = payments.find(p => p.id === id);
+                // Load existing payment data for editing - fetch by ID directly
+                try {
+                    const payment = await apiRequest(`/payments/${id}`);
 
-                if (payment) {
-                    document.getElementById('paymentTenant').value = payment.tenant_id;
-                    document.getElementById('paymentDate').value = payment.payment_date;
-                    document.getElementById('paymentAmount').value = payment.amount;
-                    document.getElementById('paymentMethod').value = payment.payment_method;
-                    document.getElementById('paymentCheckNumber').value = payment.check_number || '';
-                    document.getElementById('paymentPaidInFull').checked = payment.paid_in_full === 1;
-                    document.getElementById('paymentNotes').value = payment.notes || '';
+                    if (payment) {
+                        document.getElementById('paymentTenant').value = payment.tenant_id;
+                        // Format date properly for input field (YYYY-MM-DD)
+                        const dateValue = payment.payment_date ? payment.payment_date.split('T')[0] : '';
+                        document.getElementById('paymentDate').value = dateValue;
+                        document.getElementById('paymentAmount').value = payment.amount;
+                        document.getElementById('paymentMethod').value = payment.payment_method;
+                        document.getElementById('paymentCheckNumber').value = payment.check_number || '';
+                        // Handle boolean/bit value from database
+                        document.getElementById('paymentPaidInFull').checked = payment.paid_in_full === true || payment.paid_in_full === 1;
+                        document.getElementById('paymentNotes').value = payment.notes || '';
 
-                    if (payment.payment_method === 'Check') {
-                        document.getElementById('checkNumberRow').style.display = 'flex';
+                        if (payment.payment_method === 'Check') {
+                            document.getElementById('checkNumberRow').style.display = 'flex';
+                        } else {
+                            document.getElementById('checkNumberRow').style.display = 'none';
+                        }
                     }
+                } catch (error) {
+                    console.error('Failed to load payment:', error);
+                    alert('Failed to load payment data');
+                    return;
                 }
             } else {
                 document.getElementById('paymentModal').querySelector('form').reset();
@@ -1532,7 +1746,27 @@
                     properties.forEach(property => {
                         const option = document.createElement('option');
                         option.value = property.id;
-                        option.textContent = property.address;
+                        option.textContent = [property.address1, property.city, property.state].filter(Boolean).join(', ');
+                        select.appendChild(option);
+                    });
+                    select.value = currentValue;
+                }
+            });
+        }
+
+        function updateCompanyDropdowns() {
+            const selects = ['propertyCompany', 'expenseCompany'];
+            selects.forEach(selectId => {
+                const select = document.getElementById(selectId);
+                if (select) {
+                    const currentValue = select.value;
+                    select.innerHTML = selectId === 'propertyCompany'
+                        ? '<option value="">No Company (Personal)</option>'
+                        : '<option value="">Select Company</option>';
+                    companies.forEach(company => {
+                        const option = document.createElement('option');
+                        option.value = company.id;
+                        option.textContent = company.name;
                         select.appendChild(option);
                     });
                     select.value = currentValue;
@@ -1625,12 +1859,6 @@
 
         // Lease document functions
         async function handleLeaseDocumentChange() {
-            if (!currentEditId) {
-                alert('Please save the lease first before uploading a document');
-                document.getElementById('leaseDocument').value = '';
-                return;
-            }
-
             const fileInput = document.getElementById('leaseDocument');
             const file = fileInput.files[0];
 
@@ -1643,31 +1871,34 @@
                 return;
             }
 
-            const formData = new FormData();
-            formData.append('document', file);
+            // If editing an existing lease, upload immediately
+            if (currentEditId) {
+                const formData = new FormData();
+                formData.append('document', file);
 
-            try {
-                const response = await fetch(`${API_BASE}/leases/${currentEditId}/upload`, {
-                    method: 'POST',
-                    body: formData
-                });
+                try {
+                    const response = await fetch(`${API_BASE}/leases/${currentEditId}/upload`, {
+                        method: 'POST',
+                        body: formData
+                    });
 
-                if (!response.ok) {
-                    throw new Error('Upload failed');
+                    if (!response.ok) {
+                        throw new Error('Upload failed');
+                    }
+
+                    alert('Document uploaded successfully!');
+
+                    // Reload leases and reopen modal
+                    await loadLeases();
+                    fileInput.value = '';
+                    openLeaseModal(currentEditId);
+                } catch (error) {
+                    console.error('Failed to upload document:', error);
+                    alert('Failed to upload document. Please try again.');
+                    fileInput.value = '';
                 }
-
-                const result = await response.json();
-                alert('Document uploaded successfully!');
-
-                // Reload leases and reopen modal
-                await loadLeases();
-                fileInput.value = '';
-                openLeaseModal(currentEditId);
-            } catch (error) {
-                console.error('Failed to upload document:', error);
-                alert('Failed to upload document. Please try again.');
-                fileInput.value = '';
             }
+            // For new leases, the file will be uploaded when saving
         }
 
         async function deleteLeaseDocument(leaseId) {
@@ -1686,19 +1917,50 @@
         }
 
         // Save functions
+        async function saveCompany(event) {
+            event.preventDefault();
+
+            const companyData = {
+                name: document.getElementById('companyName').value,
+                notes: document.getElementById('companyNotes').value
+            };
+
+            try {
+                if (currentEditId) {
+                    await apiRequest(`/companies/${currentEditId}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(companyData)
+                    });
+                } else {
+                    await apiRequest('/companies', {
+                        method: 'POST',
+                        body: JSON.stringify(companyData)
+                    });
+                }
+
+                await loadCompanies();
+                await loadProperties(); // Refresh to update company names
+                updateDashboard();
+                closeModal('companyModal');
+            } catch (error) {
+                console.error('Failed to save company:', error);
+            }
+        }
+
         async function saveProperty(event) {
             event.preventDefault();
-            
+
             const propertyData = {
-                address: document.getElementById('propertyAddress').value,
+                address1: document.getElementById('propertyAddress1').value,
+                city: document.getElementById('propertyCity').value,
+                state: document.getElementById('propertyState').value,
+                zip: document.getElementById('propertyZip').value,
                 type: document.getElementById('propertyType').value,
-                purchase_price: parseFloat(document.getElementById('propertyPurchasePrice').value),
-                current_value: parseFloat(document.getElementById('propertyCurrentValue').value) || 0,
-                mortgage: parseFloat(document.getElementById('propertyMortgage').value) || 0,
+                company_id: document.getElementById('propertyCompany').value || null,
                 status: document.getElementById('propertyStatus').value,
                 notes: document.getElementById('propertyNotes').value
             };
-            
+
             try {
                 if (currentEditId) {
                     await apiRequest(`/properties/${currentEditId}`, {
@@ -1711,8 +1973,9 @@
                         body: JSON.stringify(propertyData)
                     });
                 }
-                
+
                 await loadProperties();
+                await loadCompanies(); // Refresh companies table to update property count
                 updateDashboard();
                 closeModal('propertyModal');
             } catch (error) {
@@ -1757,7 +2020,7 @@
         
         async function saveLease(event) {
             event.preventDefault();
-            
+
             const leaseData = {
                 tenant_id: parseInt(document.getElementById('leaseTenant').value),
                 property_id: parseInt(document.getElementById('leaseProperty').value),
@@ -1767,20 +2030,47 @@
                 deposit: parseFloat(document.getElementById('leaseDeposit').value) || 0,
                 terms: document.getElementById('leaseTerms').value
             };
-            
+
+            const fileInput = document.getElementById('leaseDocument');
+            const file = fileInput.files[0];
+
             try {
+                let leaseId = currentEditId;
+
                 if (currentEditId) {
                     await apiRequest(`/leases/${currentEditId}`, {
                         method: 'PUT',
                         body: JSON.stringify(leaseData)
                     });
                 } else {
-                    await apiRequest('/leases', {
+                    const result = await apiRequest('/leases', {
                         method: 'POST',
                         body: JSON.stringify(leaseData)
                     });
+                    leaseId = result.id;
                 }
-                
+
+                // Upload document if a file was selected
+                if (file && leaseId) {
+                    // Check file size (10MB max)
+                    if (file.size > 10 * 1024 * 1024) {
+                        alert('Lease saved, but document was too large (max 10MB). You can upload it later.');
+                    } else {
+                        const formData = new FormData();
+                        formData.append('document', file);
+
+                        try {
+                            await fetch(`${API_BASE}/leases/${leaseId}/upload`, {
+                                method: 'POST',
+                                body: formData
+                            });
+                        } catch (uploadError) {
+                            console.error('Document upload failed:', uploadError);
+                            alert('Lease saved, but document upload failed. You can upload it later by editing the lease.');
+                        }
+                    }
+                }
+
                 await loadLeases();
                 updateDashboard();
                 closeModal('leaseModal');
@@ -1792,9 +2082,20 @@
         async function saveExpense(event) {
             event.preventDefault();
 
+            const assignmentType = document.getElementById('expenseAssignmentType').value;
+            let property_id = null;
+            let company_id = null;
+
+            if (assignmentType === 'property') {
+                property_id = document.getElementById('expenseProperty').value || null;
+            } else if (assignmentType === 'company') {
+                company_id = document.getElementById('expenseCompany').value || null;
+            }
+
             const expenseData = {
                 date: document.getElementById('expenseDate').value,
-                property_id: document.getElementById('expenseProperty').value || null,
+                property_id: property_id,
+                company_id: company_id,
                 category: document.getElementById('expenseCategory').value,
                 amount: parseFloat(document.getElementById('expenseAmount').value),
                 description: document.getElementById('expenseDescription').value
@@ -1821,12 +2122,22 @@
             }
         }
 
+        let isSavingPayment = false; // Prevent double submission
+
         async function savePayment(event) {
             event.preventDefault();
 
+            // Prevent double submission
+            if (isSavingPayment) return;
+            isSavingPayment = true;
+
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            if (submitBtn) submitBtn.disabled = true;
+
+            const paymentDate = document.getElementById('paymentDate').value;
             const paymentData = {
                 tenant_id: parseInt(document.getElementById('paymentTenant').value),
-                payment_date: document.getElementById('paymentDate').value,
+                payment_date: paymentDate,
                 amount: parseFloat(document.getElementById('paymentAmount').value),
                 payment_method: document.getElementById('paymentMethod').value,
                 check_number: document.getElementById('paymentCheckNumber').value,
@@ -1847,20 +2158,47 @@
                     });
                 }
 
+                // Set the month filter to show the payment's month
+                const paymentMonth = paymentDate.substring(0, 7); // Get YYYY-MM format
+                document.getElementById('paymentMonth').value = paymentMonth;
+
                 await loadPayments();
                 await loadPaymentSummary();
                 closeModal('paymentModal');
             } catch (error) {
                 console.error('Failed to save payment:', error);
+            } finally {
+                isSavingPayment = false;
+                if (submitBtn) submitBtn.disabled = false;
             }
         }
 
         // Delete functions
+        async function deleteCompany(id) {
+            // Check if company has properties
+            const companyProperties = properties.filter(p => p.company_id === id);
+            if (companyProperties.length > 0) {
+                alert(`Cannot delete this company. It has ${companyProperties.length} property(ies) assigned to it. Please reassign or remove the properties first.`);
+                return;
+            }
+
+            if (confirm('Are you sure you want to delete this company?')) {
+                try {
+                    await apiRequest(`/companies/${id}`, { method: 'DELETE' });
+                    await loadCompanies();
+                    updateDashboard();
+                } catch (error) {
+                    console.error('Failed to delete company:', error);
+                }
+            }
+        }
+
         async function deleteProperty(id) {
             if (confirm('Are you sure you want to delete this property?')) {
                 try {
                     await apiRequest(`/properties/${id}`, { method: 'DELETE' });
                     await loadProperties();
+                    await loadCompanies(); // Refresh to update property counts
                     updateDashboard();
                 } catch (error) {
                     console.error('Failed to delete property:', error);
@@ -1917,23 +2255,58 @@
         }
 
         // Render table functions
+        function renderCompaniesTable() {
+            const tbody = document.getElementById('companiesTableBody');
+            tbody.innerHTML = '';
+
+            if (companies.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" class="no-data">No companies added yet</td></tr>';
+                return;
+            }
+
+            companies.forEach(company => {
+                // Count properties for this company
+                const propertyCount = properties.filter(p => p.company_id === company.id).length;
+                const propertyList = properties
+                    .filter(p => p.company_id === company.id)
+                    .map(p => p.address1 || 'Unknown')
+                    .join(', ') || 'None';
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${company.name}</strong></td>
+                    <td>${propertyCount} propert${propertyCount === 1 ? 'y' : 'ies'}${propertyCount > 0 ? ': ' + propertyList : ''}</td>
+                    <td>${company.notes || '-'}</td>
+                    <td>
+                        <button class="btn" onclick="openCompanyModal(${company.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteCompany(${company.id})">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
         function renderPropertiesTable() {
             const tbody = document.getElementById('propertiesTableBody');
             tbody.innerHTML = '';
-            
+
             if (properties.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="7" class="no-data">No properties added yet</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" class="no-data">No properties added yet</td></tr>';
                 return;
             }
-            
+
             properties.forEach(property => {
+                const companyName = property.company_name || 'Personal';
+                // Format full address from components
+                const fullAddress = [property.address1, property.city, property.state, property.zip]
+                    .filter(Boolean)
+                    .join(', ');
+
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td>${property.address}</td>
+                    <td>${fullAddress || 'No address'}</td>
                     <td>${property.type}</td>
-                    <td>${property.purchase_price.toLocaleString()}</td>
-                    <td>${property.mortgage.toLocaleString()}</td>
-                    <td>${property.current_value.toLocaleString()}</td>
+                    <td>${companyName}</td>
                     <td><span class="status-badge status-${property.status.toLowerCase().replace(' ', '-')}">${property.status}</span></td>
                     <td>
                         <button class="btn" onclick="openPropertyModal(${property.id})">Edit</button>
@@ -1949,7 +2322,7 @@
             tbody.innerHTML = '';
 
             if (tenants.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="8" class="no-data">No tenants added yet</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="no-data">No tenants added yet</td></tr>';
                 return;
             }
 
@@ -1976,7 +2349,6 @@
                     <td>${propertyAddress}</td>
                     <td>${floor}</td>
                     <td>${tenant.phone}</td>
-                    <td>${tenant.email || '-'}</td>
                     <td>${rentAmount}</td>
                     <td><span class="status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span></td>
                     <td>
@@ -2036,15 +2408,21 @@
             }
 
             expenses.forEach(expense => {
-                const propertyAddress = expense.property_address || 'General Expense';
+                // Show property, company, or "General Expense"
+                let assignedTo = 'General Expense';
+                if (expense.property_address) {
+                    assignedTo = expense.property_address;
+                } else if (expense.company_name) {
+                    assignedTo = `🏢 ${expense.company_name}`;
+                }
 
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${formatDate(expense.date)}</td>
-                    <td>${propertyAddress}</td>
+                    <td>${assignedTo}</td>
                     <td>${expense.category}</td>
                     <td>${expense.description}</td>
-                    <td>${expense.amount.toLocaleString()}</td>
+                    <td>$${expense.amount.toLocaleString()}</td>
                     <td>
                         <button class="btn" onclick="openExpenseModal(${expense.id})">Edit</button>
                         <button class="btn btn-danger" onclick="deleteExpense(${expense.id})">Delete</button>
@@ -2102,7 +2480,17 @@
         }
         
         function formatDate(dateString) {
-            return new Date(dateString).toLocaleDateString();
+            if (!dateString) return '';
+            // Parse the date string and format it without timezone conversion
+            const datePart = dateString.split('T')[0]; // Get YYYY-MM-DD
+            const [year, month, day] = datePart.split('-');
+            return `${month}/${day}/${year}`;
+        }
+
+        // Helper to get date in YYYY-MM-DD format for input fields
+        function getDateForInput(dateString) {
+            if (!dateString) return '';
+            return dateString.split('T')[0]; // Get YYYY-MM-DD part
         }
         
         function formatCurrency(amount) {
