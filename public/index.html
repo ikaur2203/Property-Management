@@ -1457,6 +1457,9 @@
                 renderLeasesTable();
                 renderExpensesTable();
 
+                // Update dropdowns that depend on loaded data
+                updatePaymentTenantFilterDropdown();
+
                 updateDashboard();
             } catch (error) {
                 console.error('Failed to load data:', error);
