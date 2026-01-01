@@ -786,7 +786,7 @@
                         <option value="">All Categories</option>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" style="display: flex; align-items: flex-end;">
                     <button class="btn" onclick="generateReport()">Generate Report</button>
                 </div>
             </div>
@@ -1170,7 +1170,7 @@
                             <option value="Utilities">Utilities</option>
                             <option value="Water Bill">Water Bill</option>
                             <option value="Gardening">Gardening</option>
-                            <option value="Home Demo">Home Demo</option>
+                            <option value="Home Depot">Home Depot</option>
                             <option value="Insurance">Insurance</option>
                             <option value="Mortgage">Mortgage Payment</option>
                             <option value="Legal">Legal Fees</option>
@@ -1243,18 +1243,64 @@
         let tenants = [];
         let leases = [];
         let expenses = [];
+        let customExpenseCategories = [];
         let currentEditId = null;
 
         // API Base URL
         const API_BASE = '/api';
-        
+
+        // Current owner info
+        let currentOwner = null;
+
         // Initialize the app
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Check authentication first
+            try {
+                const response = await fetch('/api/auth/session', {
+                    credentials: 'same-origin'
+                });
+                const data = await response.json();
+
+                if (!data.authenticated) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+
+                // Store owner info
+                currentOwner = data.owner;
+                updateUserDisplay();
+            } catch (error) {
+                console.error('Auth check failed:', error);
+                window.location.href = '/login.html';
+                return;
+            }
+
             loadData();
             setDefaultDate();
             initializePWA();
             handleShortcuts();
         });
+
+        // Update header with user info
+        function updateUserDisplay() {
+            const headerP = document.querySelector('.header p');
+            if (headerP && currentOwner) {
+                headerP.innerHTML = `Welcome, <strong>${currentOwner.name}</strong> | <a href="#" onclick="logout(); return false;" style="color: #667eea;">Logout</a>`;
+            }
+        }
+
+        // Logout function
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'same-origin'
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            window.location.href = '/login.html';
+        }
         
         // PWA Initialization
         function initializePWA() {
@@ -1398,6 +1444,11 @@
                 console.log(`API Response: ${response.status} ${response.statusText}`);
                 
                 if (!response.ok) {
+                    // Handle authentication errors - redirect to login
+                    if (response.status === 401) {
+                        window.location.href = '/login.html';
+                        return;
+                    }
                     const errorText = await response.text();
                     throw new Error(`HTTP ${response.status}: ${errorText || response.statusText}`);
                 }
@@ -1435,12 +1486,13 @@
         async function loadData() {
             try {
                 // Load all data in parallel
-                const [companiesData, propertiesData, tenantsData, leasesData, expensesData] = await Promise.all([
+                const [companiesData, propertiesData, tenantsData, leasesData, expensesData, categoriesData] = await Promise.all([
                     apiRequest('/companies'),
                     apiRequest('/properties'),
                     apiRequest('/tenants'),
                     apiRequest('/leases'),
-                    apiRequest('/expenses')
+                    apiRequest('/expenses'),
+                    apiRequest('/expense-categories')
                 ]);
 
                 // Assign to global variables
@@ -1449,6 +1501,7 @@
                 tenants = tenantsData;
                 leases = leasesData;
                 expenses = expensesData;
+                customExpenseCategories = categoriesData;
 
                 // Now render all tables (leases are guaranteed to be loaded)
                 renderCompaniesTable();
@@ -1459,6 +1512,7 @@
 
                 // Update dropdowns that depend on loaded data
                 updatePaymentTenantFilterDropdown();
+                updateExpenseCategoryDropdown();
 
                 updateDashboard();
             } catch (error) {
@@ -2231,12 +2285,14 @@
 
             // Handle custom category
             let category = document.getElementById('expenseCategory').value;
+            let isNewCustomCategory = false;
             if (category === '__custom__') {
                 category = document.getElementById('customExpenseCategory').value.trim();
                 if (!category) {
                     alert('Please enter a custom category name');
                     return;
                 }
+                isNewCustomCategory = true;
             }
 
             const expenseData = {
@@ -2249,6 +2305,11 @@
             };
 
             try {
+                // Save custom category to database if it's a new one
+                if (isNewCustomCategory) {
+                    await saveCustomExpenseCategory(category);
+                }
+
                 if (currentEditId) {
                     await apiRequest(`/expenses/${currentEditId}`, {
                         method: 'PUT',
@@ -2911,6 +2972,45 @@
             }
 
             toggleExpenseAssignment();
+        }
+
+        // Update expense category dropdown with custom categories from database
+        function updateExpenseCategoryDropdown() {
+            const select = document.getElementById('expenseCategory');
+            if (!select) return;
+
+            // Remove existing custom categories (keep default options)
+            const existingCustomOptions = select.querySelectorAll('option[data-custom="true"]');
+            existingCustomOptions.forEach(opt => opt.remove());
+
+            // Add custom categories before the "Other" option
+            const otherOption = select.querySelector('option[value="Other"]');
+            customExpenseCategories.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.name;
+                option.textContent = cat.name;
+                option.setAttribute('data-custom', 'true');
+                if (otherOption) {
+                    select.insertBefore(option, otherOption);
+                } else {
+                    select.appendChild(option);
+                }
+            });
+        }
+
+        // Save custom expense category to database
+        async function saveCustomExpenseCategory(categoryName) {
+            try {
+                await apiRequest('/expense-categories', {
+                    method: 'POST',
+                    body: JSON.stringify({ name: categoryName })
+                });
+                // Reload categories
+                customExpenseCategories = await apiRequest('/expense-categories');
+                updateExpenseCategoryDropdown();
+            } catch (error) {
+                console.error('Failed to save custom category:', error);
+            }
         }
         
         // Close modals when clicking outside

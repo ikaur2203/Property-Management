@@ -7,6 +7,8 @@ const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
 const { BlobServiceClient } = require('@azure/storage-blob');
+const session = require('express-session');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -70,6 +72,20 @@ async function initializeDatabase() {
 async function createTables() {
     const pool = await poolPromise;
 
+    // Owners table (must be created first)
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='owners' AND xtype='U')
+        CREATE TABLE owners (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            email NVARCHAR(255) NOT NULL UNIQUE,
+            password_hash NVARCHAR(255) NOT NULL,
+            name NVARCHAR(255) NOT NULL,
+            is_admin BIT DEFAULT 0,
+            created_at DATETIME2 DEFAULT GETDATE(),
+            last_login DATETIME2
+        )
+    `);
+
     // Companies/LLCs table (must be created before properties)
     await pool.request().query(`
         IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='companies' AND xtype='U')
@@ -79,6 +95,12 @@ async function createTables() {
             notes NVARCHAR(MAX),
             created_at DATETIME2 DEFAULT GETDATE()
         )
+    `);
+
+    // Add owner_id column to companies table if it doesn't exist
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('companies') AND name = 'owner_id')
+        ALTER TABLE companies ADD owner_id INT NULL
     `);
 
     // Properties table (with separate address fields)
@@ -109,6 +131,12 @@ async function createTables() {
     await pool.request().query(`
         IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'notes')
         ALTER TABLE properties ADD notes NVARCHAR(MAX) NULL
+    `);
+
+    // Add owner_id column to properties table if it doesn't exist
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'owner_id')
+        ALTER TABLE properties ADD owner_id INT NULL
     `);
 
     // Drop old columns from properties table if they exist (purchase_price, current_value, monthly_mortgage)
@@ -239,6 +267,22 @@ async function createTables() {
         )
     `);
 
+    // Custom expense categories table
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='expense_categories' AND xtype='U')
+        CREATE TABLE expense_categories (
+            id INT IDENTITY(1,1) PRIMARY KEY,
+            name NVARCHAR(100) NOT NULL,
+            created_at DATETIME2 DEFAULT GETDATE()
+        )
+    `);
+
+    // Add owner_id column to expense_categories table if it doesn't exist
+    await pool.request().query(`
+        IF NOT EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('expense_categories') AND name = 'owner_id')
+        ALTER TABLE expense_categories ADD owner_id INT NULL
+    `);
+
     console.log('✅ Database tables initialized');
 }
 
@@ -279,11 +323,46 @@ const upload = multer({
 
 // Middleware
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    credentials: true,
+    origin: true
+}));
+
+// Session configuration
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'property-management-secret-key-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+}));
+
 app.use(express.static('public'));
 
 if (!USE_AZURE_STORAGE) {
     app.use('/uploads', express.static(uploadsDir));
+}
+
+// Authentication middleware
+function requireAuth(req, res, next) {
+    if (req.session && req.session.ownerId) {
+        req.ownerId = req.session.ownerId;
+        next();
+    } else {
+        res.status(401).json({ error: 'Authentication required' });
+    }
+}
+
+// Admin-only middleware
+function requireAdmin(req, res, next) {
+    if (req.session && req.session.isAdmin) {
+        next();
+    } else {
+        res.status(403).json({ error: 'Admin access required' });
+    }
 }
 
 // PWA Routes
@@ -296,27 +375,150 @@ app.get('/sw.js', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'sw.js'));
 });
 
-// ==================== COMPANIES ROUTES ====================
-app.get('/api/companies', async (req, res) => {
+// ==================== AUTHENTICATION ROUTES ====================
+// Login endpoint
+app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body;
     try {
         const pool = await poolPromise;
-        const result = await pool.request().query('SELECT * FROM companies ORDER BY name ASC');
+        const result = await pool.request()
+            .input('email', sql.NVarChar, email)
+            .query('SELECT * FROM owners WHERE email = @email');
+
+        const owner = result.recordset[0];
+
+        if (!owner) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        const validPassword = await bcrypt.compare(password, owner.password_hash);
+
+        if (!validPassword) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        // Update last login
+        await pool.request()
+            .input('id', sql.Int, owner.id)
+            .query('UPDATE owners SET last_login = GETDATE() WHERE id = @id');
+
+        // Set session
+        req.session.ownerId = owner.id;
+        req.session.ownerEmail = owner.email;
+        req.session.ownerName = owner.name;
+        req.session.isAdmin = owner.is_admin;
+
+        res.json({
+            success: true,
+            owner: {
+                id: owner.id,
+                email: owner.email,
+                name: owner.name,
+                isAdmin: owner.is_admin
+            }
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Logout endpoint
+app.post('/api/auth/logout', (req, res) => {
+    req.session.destroy(err => {
+        if (err) {
+            return res.status(500).json({ error: 'Failed to logout' });
+        }
+        res.json({ success: true });
+    });
+});
+
+// Check session endpoint
+app.get('/api/auth/session', (req, res) => {
+    if (req.session && req.session.ownerId) {
+        res.json({
+            authenticated: true,
+            owner: {
+                id: req.session.ownerId,
+                email: req.session.ownerEmail,
+                name: req.session.ownerName,
+                isAdmin: req.session.isAdmin
+            }
+        });
+    } else {
+        res.json({ authenticated: false });
+    }
+});
+
+// Admin: Create owner
+app.post('/api/admin/owners', requireAuth, requireAdmin, async (req, res) => {
+    const { email, password, name, isAdmin } = req.body;
+    try {
+        const pool = await poolPromise;
+
+        // Check if email already exists
+        const existing = await pool.request()
+            .input('email', sql.NVarChar, email)
+            .query('SELECT id FROM owners WHERE email = @email');
+
+        if (existing.recordset.length > 0) {
+            return res.status(400).json({ error: 'Email already exists' });
+        }
+
+        // Hash password
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password, salt);
+
+        const result = await pool.request()
+            .input('email', sql.NVarChar, email)
+            .input('password_hash', sql.NVarChar, passwordHash)
+            .input('name', sql.NVarChar, name)
+            .input('is_admin', sql.Bit, isAdmin ? 1 : 0)
+            .query(`INSERT INTO owners (email, password_hash, name, is_admin)
+                    OUTPUT INSERTED.id
+                    VALUES (@email, @password_hash, @name, @is_admin)`);
+
+        res.json({ id: result.recordset[0].id, message: 'Owner created successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Admin: List all owners
+app.get('/api/admin/owners', requireAuth, requireAdmin, async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .query('SELECT id, email, name, is_admin, created_at, last_login FROM owners ORDER BY name ASC');
         res.json(result.recordset);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.post('/api/companies', async (req, res) => {
+// ==================== COMPANIES ROUTES ====================
+app.get('/api/companies', requireAuth, async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('ownerId', sql.Int, req.ownerId)
+            .query('SELECT * FROM companies WHERE owner_id = @ownerId ORDER BY name ASC');
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/companies', requireAuth, async (req, res) => {
     const { name, notes } = req.body;
     try {
         const pool = await poolPromise;
         const result = await pool.request()
             .input('name', sql.NVarChar, name)
             .input('notes', sql.NVarChar, notes || '')
-            .query(`INSERT INTO companies (name, notes)
+            .input('owner_id', sql.Int, req.ownerId)
+            .query(`INSERT INTO companies (name, notes, owner_id)
                     OUTPUT INSERTED.id
-                    VALUES (@name, @notes)`);
+                    VALUES (@name, @notes, @owner_id)`);
 
         res.json({ id: result.recordset[0].id, message: 'Company created successfully' });
     } catch (err) {
@@ -324,11 +526,22 @@ app.post('/api/companies', async (req, res) => {
     }
 });
 
-app.put('/api/companies/:id', async (req, res) => {
+app.put('/api/companies/:id', requireAuth, async (req, res) => {
     const { name, notes } = req.body;
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify ownership
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query('SELECT id FROM companies WHERE id = @id AND owner_id = @ownerId');
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to modify this company' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .input('name', sql.NVarChar, name)
@@ -341,10 +554,21 @@ app.put('/api/companies/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/companies/:id', async (req, res) => {
+app.delete('/api/companies/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify ownership
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query('SELECT id FROM companies WHERE id = @id AND owner_id = @ownerId');
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to delete this company' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .query('DELETE FROM companies WHERE id = @id');
@@ -356,22 +580,25 @@ app.delete('/api/companies/:id', async (req, res) => {
 });
 
 // ==================== PROPERTIES ROUTES ====================
-app.get('/api/properties', async (req, res) => {
+app.get('/api/properties', requireAuth, async (req, res) => {
     try {
         const pool = await poolPromise;
-        const result = await pool.request().query(`
-            SELECT p.*, c.name as company_name
-            FROM properties p
-            LEFT JOIN companies c ON p.company_id = c.id
-            ORDER BY p.created_at DESC
-        `);
+        const result = await pool.request()
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`
+                SELECT p.*, c.name as company_name
+                FROM properties p
+                LEFT JOIN companies c ON p.company_id = c.id
+                WHERE p.owner_id = @ownerId OR c.owner_id = @ownerId
+                ORDER BY p.created_at DESC
+            `);
         res.json(result.recordset);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.post('/api/properties', async (req, res) => {
+app.post('/api/properties', requireAuth, async (req, res) => {
     const { address1, city, state, zip, type, company_id, status, notes } = req.body;
     try {
         const pool = await poolPromise;
@@ -384,9 +611,10 @@ app.post('/api/properties', async (req, res) => {
             .input('company_id', sql.Int, company_id || null)
             .input('status', sql.NVarChar, status)
             .input('notes', sql.NVarChar, notes || '')
-            .query(`INSERT INTO properties (address1, city, state, zip, type, company_id, status, notes)
+            .input('owner_id', sql.Int, req.ownerId)
+            .query(`INSERT INTO properties (address1, city, state, zip, type, company_id, status, notes, owner_id)
                     OUTPUT INSERTED.id
-                    VALUES (@address1, @city, @state, @zip, @type, @company_id, @status, @notes)`);
+                    VALUES (@address1, @city, @state, @zip, @type, @company_id, @status, @notes, @owner_id)`);
 
         res.json({ id: result.recordset[0].id, message: 'Property created successfully' });
     } catch (err) {
@@ -395,11 +623,24 @@ app.post('/api/properties', async (req, res) => {
     }
 });
 
-app.put('/api/properties/:id', async (req, res) => {
+app.put('/api/properties/:id', requireAuth, async (req, res) => {
     const { address1, city, state, zip, type, company_id, status, notes } = req.body;
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify ownership
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT p.id FROM properties p
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE p.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to modify this property' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .input('address1', sql.NVarChar, address1)
@@ -419,10 +660,23 @@ app.put('/api/properties/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/properties/:id', async (req, res) => {
+app.delete('/api/properties/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify ownership
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT p.id FROM properties p
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE p.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to delete this property' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .query('DELETE FROM properties WHERE id = @id');
@@ -434,25 +688,44 @@ app.delete('/api/properties/:id', async (req, res) => {
 });
 
 // ==================== TENANTS ROUTES ====================
-app.get('/api/tenants', async (req, res) => {
+app.get('/api/tenants', requireAuth, async (req, res) => {
     try {
         const pool = await poolPromise;
-        const result = await pool.request().query(`
-            SELECT t.*, p.address1 as property_address
-            FROM tenants t
-            LEFT JOIN properties p ON t.property_id = p.id
-            ORDER BY t.created_at DESC
-        `);
+        const result = await pool.request()
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`
+                SELECT t.*, p.address1 as property_address
+                FROM tenants t
+                LEFT JOIN properties p ON t.property_id = p.id
+                LEFT JOIN companies c ON p.company_id = c.id
+                WHERE p.owner_id = @ownerId OR c.owner_id = @ownerId
+                ORDER BY t.created_at DESC
+            `);
         res.json(result.recordset);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.post('/api/tenants', async (req, res) => {
+app.post('/api/tenants', requireAuth, async (req, res) => {
     const { name, phone, email, floor, property_id, emergency_contact, emergency_phone, notes } = req.body;
     try {
         const pool = await poolPromise;
+
+        // Verify property ownership if property_id is provided
+        if (property_id) {
+            const ownerCheck = await pool.request()
+                .input('propertyId', sql.Int, property_id)
+                .input('ownerId', sql.Int, req.ownerId)
+                .query(`SELECT p.id FROM properties p
+                        LEFT JOIN companies c ON p.company_id = c.id
+                        WHERE p.id = @propertyId AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+            if (ownerCheck.recordset.length === 0) {
+                return res.status(403).json({ error: 'Not authorized to add tenant to this property' });
+            }
+        }
+
         const result = await pool.request()
             .input('name', sql.NVarChar, name)
             .input('phone', sql.NVarChar, phone)
@@ -472,11 +745,25 @@ app.post('/api/tenants', async (req, res) => {
     }
 });
 
-app.put('/api/tenants/:id', async (req, res) => {
+app.put('/api/tenants/:id', requireAuth, async (req, res) => {
     const { name, phone, email, floor, property_id, emergency_contact, emergency_phone, notes } = req.body;
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify tenant ownership through property
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT t.id FROM tenants t
+                    LEFT JOIN properties p ON t.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE t.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to modify this tenant' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .input('name', sql.NVarChar, name)
@@ -497,10 +784,24 @@ app.put('/api/tenants/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/tenants/:id', async (req, res) => {
+app.delete('/api/tenants/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify tenant ownership through property
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT t.id FROM tenants t
+                    LEFT JOIN properties p ON t.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE t.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to delete this tenant' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .query('DELETE FROM tenants WHERE id = @id');
@@ -512,26 +813,43 @@ app.delete('/api/tenants/:id', async (req, res) => {
 });
 
 // ==================== LEASES ROUTES ====================
-app.get('/api/leases', async (req, res) => {
+app.get('/api/leases', requireAuth, async (req, res) => {
     try {
         const pool = await poolPromise;
-        const result = await pool.request().query(`
-            SELECT l.*, t.name as tenant_name, p.address1 as property_address
-            FROM leases l
-            LEFT JOIN tenants t ON l.tenant_id = t.id
-            LEFT JOIN properties p ON l.property_id = p.id
-            ORDER BY l.start_date DESC
-        `);
+        const result = await pool.request()
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`
+                SELECT l.*, t.name as tenant_name, p.address1 as property_address
+                FROM leases l
+                LEFT JOIN tenants t ON l.tenant_id = t.id
+                LEFT JOIN properties p ON l.property_id = p.id
+                LEFT JOIN companies c ON p.company_id = c.id
+                WHERE p.owner_id = @ownerId OR c.owner_id = @ownerId
+                ORDER BY l.start_date DESC
+            `);
         res.json(result.recordset);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.post('/api/leases', async (req, res) => {
+app.post('/api/leases', requireAuth, async (req, res) => {
     const { property_id, tenant_id, start_date, end_date, rent, deposit, notes } = req.body;
     try {
         const pool = await poolPromise;
+
+        // Verify property ownership
+        const ownerCheck = await pool.request()
+            .input('propertyId', sql.Int, property_id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT p.id FROM properties p
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE p.id = @propertyId AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to create lease for this property' });
+        }
+
         const result = await pool.request()
             .input('property_id', sql.Int, property_id)
             .input('tenant_id', sql.Int, tenant_id)
@@ -550,11 +868,25 @@ app.post('/api/leases', async (req, res) => {
     }
 });
 
-app.put('/api/leases/:id', async (req, res) => {
+app.put('/api/leases/:id', requireAuth, async (req, res) => {
     const { property_id, tenant_id, start_date, end_date, rent, deposit, notes } = req.body;
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify lease ownership through property
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT l.id FROM leases l
+                    LEFT JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to modify this lease' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .input('property_id', sql.Int, property_id)
@@ -574,17 +906,25 @@ app.put('/api/leases/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/leases/:id', async (req, res) => {
+app.delete('/api/leases/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
     try {
         const pool = await poolPromise;
 
-        // Get lease document info first
-        const result = await pool.request()
+        // Verify lease ownership through property
+        const ownerCheck = await pool.request()
             .input('id', sql.Int, id)
-            .query('SELECT document_filename FROM leases WHERE id = @id');
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT l.id, l.document_filename FROM leases l
+                    LEFT JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
 
-        const lease = result.recordset[0];
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to delete this lease' });
+        }
+
+        const lease = ownerCheck.recordset[0];
 
         // Delete file if exists
         if (lease && lease.document_filename) {
@@ -615,7 +955,7 @@ app.delete('/api/leases/:id', async (req, res) => {
 });
 
 // Upload lease document
-app.post('/api/leases/:id/upload', upload.single('document'), async (req, res) => {
+app.post('/api/leases/:id/upload', requireAuth, upload.single('document'), async (req, res) => {
     const { id } = req.params;
 
     if (!req.file) {
@@ -623,6 +963,20 @@ app.post('/api/leases/:id/upload', upload.single('document'), async (req, res) =
     }
 
     try {
+        const pool = await poolPromise;
+
+        // Verify lease ownership
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT l.id FROM leases l
+                    LEFT JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to upload document to this lease' });
+        }
         const originalName = req.file.originalname;
         const uploadedAt = new Date().toISOString();
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -641,7 +995,6 @@ app.post('/api/leases/:id/upload', upload.single('document'), async (req, res) =
             fileUrl = `/uploads/${filename}`;
         }
 
-        const pool = await poolPromise;
         await pool.request()
             .input('id', sql.Int, id)
             .input('filename', sql.NVarChar, filename)
@@ -672,15 +1025,24 @@ app.post('/api/leases/:id/upload', upload.single('document'), async (req, res) =
 });
 
 // Delete lease document
-app.delete('/api/leases/:id/document', async (req, res) => {
+app.delete('/api/leases/:id/document', requireAuth, async (req, res) => {
     const { id } = req.params;
 
     try {
         const pool = await poolPromise;
 
+        // Verify lease ownership and get document info
         const result = await pool.request()
             .input('id', sql.Int, id)
-            .query('SELECT document_filename FROM leases WHERE id = @id');
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT l.document_filename FROM leases l
+                    LEFT JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (result.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to delete document from this lease' });
+        }
 
         const lease = result.recordset[0];
 
@@ -717,26 +1079,56 @@ app.delete('/api/leases/:id/document', async (req, res) => {
 });
 
 // ==================== EXPENSES ROUTES ====================
-app.get('/api/expenses', async (req, res) => {
+app.get('/api/expenses', requireAuth, async (req, res) => {
     try {
         const pool = await poolPromise;
-        const result = await pool.request().query(`
-            SELECT e.*, p.address1 as property_address, c.name as company_name
-            FROM expenses e
-            LEFT JOIN properties p ON e.property_id = p.id
-            LEFT JOIN companies c ON e.company_id = c.id
-            ORDER BY e.date DESC
-        `);
+        const result = await pool.request()
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`
+                SELECT e.*, p.address1 as property_address, c.name as company_name
+                FROM expenses e
+                LEFT JOIN properties p ON e.property_id = p.id
+                LEFT JOIN companies c ON e.company_id = c.id
+                LEFT JOIN companies pc ON p.company_id = pc.id
+                WHERE c.owner_id = @ownerId OR p.owner_id = @ownerId OR pc.owner_id = @ownerId
+                ORDER BY e.date DESC
+            `);
         res.json(result.recordset);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
 
-app.post('/api/expenses', async (req, res) => {
+app.post('/api/expenses', requireAuth, async (req, res) => {
     const { date, property_id, company_id, category, amount, description } = req.body;
     try {
         const pool = await poolPromise;
+
+        // Verify ownership of property or company
+        if (property_id) {
+            const ownerCheck = await pool.request()
+                .input('propertyId', sql.Int, property_id)
+                .input('ownerId', sql.Int, req.ownerId)
+                .query(`SELECT p.id FROM properties p
+                        LEFT JOIN companies c ON p.company_id = c.id
+                        WHERE p.id = @propertyId AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+            if (ownerCheck.recordset.length === 0) {
+                return res.status(403).json({ error: 'Not authorized to add expense to this property' });
+            }
+        }
+
+        if (company_id) {
+            const ownerCheck = await pool.request()
+                .input('companyId', sql.Int, company_id)
+                .input('ownerId', sql.Int, req.ownerId)
+                .query('SELECT id FROM companies WHERE id = @companyId AND owner_id = @ownerId');
+
+            if (ownerCheck.recordset.length === 0) {
+                return res.status(403).json({ error: 'Not authorized to add expense to this company' });
+            }
+        }
+
         const result = await pool.request()
             .input('date', sql.Date, date)
             .input('property_id', sql.Int, property_id || null)
@@ -754,11 +1146,26 @@ app.post('/api/expenses', async (req, res) => {
     }
 });
 
-app.put('/api/expenses/:id', async (req, res) => {
+app.put('/api/expenses/:id', requireAuth, async (req, res) => {
     const { date, property_id, company_id, category, amount, description } = req.body;
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify expense ownership
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT e.id FROM expenses e
+                    LEFT JOIN properties p ON e.property_id = p.id
+                    LEFT JOIN companies c ON e.company_id = c.id
+                    LEFT JOIN companies pc ON p.company_id = pc.id
+                    WHERE e.id = @id AND (c.owner_id = @ownerId OR p.owner_id = @ownerId OR pc.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to modify this expense' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .input('date', sql.Date, date)
@@ -777,10 +1184,25 @@ app.put('/api/expenses/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/expenses/:id', async (req, res) => {
+app.delete('/api/expenses/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify expense ownership
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT e.id FROM expenses e
+                    LEFT JOIN properties p ON e.property_id = p.id
+                    LEFT JOIN companies c ON e.company_id = c.id
+                    LEFT JOIN companies pc ON p.company_id = pc.id
+                    WHERE e.id = @id AND (c.owner_id = @ownerId OR p.owner_id = @ownerId OR pc.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to delete this expense' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .query('DELETE FROM expenses WHERE id = @id');
@@ -791,8 +1213,49 @@ app.delete('/api/expenses/:id', async (req, res) => {
     }
 });
 
+// ==================== EXPENSE CATEGORIES ROUTES ====================
+app.get('/api/expense-categories', requireAuth, async (req, res) => {
+    try {
+        const pool = await poolPromise;
+        const result = await pool.request()
+            .input('ownerId', sql.Int, req.ownerId)
+            .query('SELECT * FROM expense_categories WHERE owner_id = @ownerId OR owner_id IS NULL ORDER BY name ASC');
+        res.json(result.recordset);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/expense-categories', requireAuth, async (req, res) => {
+    const { name } = req.body;
+    try {
+        const pool = await poolPromise;
+
+        // Check if category already exists for this owner
+        const existing = await pool.request()
+            .input('name', sql.NVarChar, name)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query('SELECT id FROM expense_categories WHERE name = @name AND owner_id = @ownerId');
+
+        if (existing.recordset.length > 0) {
+            return res.json({ id: existing.recordset[0].id, message: 'Category already exists' });
+        }
+
+        const result = await pool.request()
+            .input('name', sql.NVarChar, name)
+            .input('owner_id', sql.Int, req.ownerId)
+            .query(`INSERT INTO expense_categories (name, owner_id)
+                    OUTPUT INSERTED.id
+                    VALUES (@name, @owner_id)`);
+
+        res.json({ id: result.recordset[0].id, message: 'Category created successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // ==================== RENT PAYMENTS ROUTES ====================
-app.get('/api/payments', async (req, res) => {
+app.get('/api/payments', requireAuth, async (req, res) => {
     const { month, year, tenant_id } = req.query;
     try {
         const pool = await poolPromise;
@@ -801,9 +1264,10 @@ app.get('/api/payments', async (req, res) => {
                      FROM rent_payments p
                      LEFT JOIN tenants t ON p.tenant_id = t.id
                      LEFT JOIN leases l ON l.tenant_id = p.tenant_id AND l.end_date >= CAST(GETDATE() AS DATE)
-                     LEFT JOIN properties pr ON l.property_id = pr.id`;
+                     LEFT JOIN properties pr ON l.property_id = pr.id
+                     LEFT JOIN companies c ON pr.company_id = c.id`;
 
-        let conditions = [];
+        let conditions = ['(pr.owner_id = @ownerId OR c.owner_id = @ownerId)'];
 
         if (month && year) {
             conditions.push(`MONTH(p.payment_date) = @month AND YEAR(p.payment_date) = @year`);
@@ -815,13 +1279,11 @@ app.get('/api/payments', async (req, res) => {
             conditions.push(`p.tenant_id = @tenant_id`);
         }
 
-        if (conditions.length > 0) {
-            query += ' WHERE ' + conditions.join(' AND ');
-        }
-
+        query += ' WHERE ' + conditions.join(' AND ');
         query += ' ORDER BY p.payment_date DESC';
 
         const request = pool.request();
+        request.input('ownerId', sql.Int, req.ownerId);
         if (month && year) {
             request.input('month', sql.Int, parseInt(month));
             request.input('year', sql.Int, parseInt(year));
@@ -840,7 +1302,7 @@ app.get('/api/payments', async (req, res) => {
 });
 
 // Get payment summary - MUST be before /:id route
-app.get('/api/payments/summary', async (req, res) => {
+app.get('/api/payments/summary', requireAuth, async (req, res) => {
     const { month, year } = req.query;
     const today = new Date();
     const currentYear = year || today.getFullYear();
@@ -849,26 +1311,42 @@ app.get('/api/payments/summary', async (req, res) => {
     try {
         const pool = await poolPromise;
 
-        // Get total expected rent (multiply by 12 for yearly view)
+        // Get total expected rent for owner's properties (multiply by 12 for yearly view)
         const expectedResult = await pool.request()
-            .query(`SELECT SUM(rent) as expected_total FROM leases WHERE end_date >= CAST(GETDATE() AS DATE)`);
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT SUM(l.rent) as expected_total
+                    FROM leases l
+                    LEFT JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.end_date >= CAST(GETDATE() AS DATE)
+                    AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
 
         let collectedResult, methodsResult;
 
         if (isYearlyView) {
-            // Yearly view - get all payments for the year
+            // Yearly view - get all payments for the year for owner's tenants
             collectedResult = await pool.request()
                 .input('year', sql.Int, parseInt(currentYear))
-                .query(`SELECT SUM(amount) as collected_total, COUNT(*) as payment_count
-                        FROM rent_payments
-                        WHERE YEAR(payment_date) = @year`);
+                .input('ownerId', sql.Int, req.ownerId)
+                .query(`SELECT SUM(rp.amount) as collected_total, COUNT(*) as payment_count
+                        FROM rent_payments rp
+                        LEFT JOIN tenants t ON rp.tenant_id = t.id
+                        LEFT JOIN properties p ON t.property_id = p.id
+                        LEFT JOIN companies c ON p.company_id = c.id
+                        WHERE YEAR(rp.payment_date) = @year
+                        AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
 
             methodsResult = await pool.request()
                 .input('year', sql.Int, parseInt(currentYear))
-                .query(`SELECT payment_method, SUM(amount) as total, COUNT(*) as count
-                        FROM rent_payments
-                        WHERE YEAR(payment_date) = @year
-                        GROUP BY payment_method`);
+                .input('ownerId', sql.Int, req.ownerId)
+                .query(`SELECT rp.payment_method, SUM(rp.amount) as total, COUNT(*) as count
+                        FROM rent_payments rp
+                        LEFT JOIN tenants t ON rp.tenant_id = t.id
+                        LEFT JOIN properties p ON t.property_id = p.id
+                        LEFT JOIN companies c ON p.company_id = c.id
+                        WHERE YEAR(rp.payment_date) = @year
+                        AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)
+                        GROUP BY rp.payment_method`);
         } else {
             // Monthly view
             const currentMonth = month || (today.getMonth() + 1);
@@ -876,17 +1354,27 @@ app.get('/api/payments/summary', async (req, res) => {
             collectedResult = await pool.request()
                 .input('month', sql.Int, parseInt(currentMonth))
                 .input('year', sql.Int, parseInt(currentYear))
-                .query(`SELECT SUM(amount) as collected_total, COUNT(*) as payment_count
-                        FROM rent_payments
-                        WHERE MONTH(payment_date) = @month AND YEAR(payment_date) = @year`);
+                .input('ownerId', sql.Int, req.ownerId)
+                .query(`SELECT SUM(rp.amount) as collected_total, COUNT(*) as payment_count
+                        FROM rent_payments rp
+                        LEFT JOIN tenants t ON rp.tenant_id = t.id
+                        LEFT JOIN properties p ON t.property_id = p.id
+                        LEFT JOIN companies c ON p.company_id = c.id
+                        WHERE MONTH(rp.payment_date) = @month AND YEAR(rp.payment_date) = @year
+                        AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
 
             methodsResult = await pool.request()
                 .input('month', sql.Int, parseInt(currentMonth))
                 .input('year', sql.Int, parseInt(currentYear))
-                .query(`SELECT payment_method, SUM(amount) as total, COUNT(*) as count
-                        FROM rent_payments
-                        WHERE MONTH(payment_date) = @month AND YEAR(payment_date) = @year
-                        GROUP BY payment_method`);
+                .input('ownerId', sql.Int, req.ownerId)
+                .query(`SELECT rp.payment_method, SUM(rp.amount) as total, COUNT(*) as count
+                        FROM rent_payments rp
+                        LEFT JOIN tenants t ON rp.tenant_id = t.id
+                        LEFT JOIN properties p ON t.property_id = p.id
+                        LEFT JOIN companies c ON p.company_id = c.id
+                        WHERE MONTH(rp.payment_date) = @month AND YEAR(rp.payment_date) = @year
+                        AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)
+                        GROUP BY rp.payment_method`);
         }
 
         const expected = expectedResult.recordset[0];
@@ -910,19 +1398,21 @@ app.get('/api/payments/summary', async (req, res) => {
 });
 
 // Get single payment by ID
-app.get('/api/payments/:id', async (req, res) => {
+app.get('/api/payments/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
     try {
         const pool = await poolPromise;
         const result = await pool.request()
             .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
             .query(`SELECT p.*, t.name as tenant_name, t.phone as tenant_phone,
                     pr.address1 as property_address, l.rent as expected_rent
                     FROM rent_payments p
                     LEFT JOIN tenants t ON p.tenant_id = t.id
                     LEFT JOIN leases l ON l.tenant_id = p.tenant_id AND l.end_date >= CAST(GETDATE() AS DATE)
                     LEFT JOIN properties pr ON l.property_id = pr.id
-                    WHERE p.id = @id`);
+                    LEFT JOIN companies c ON pr.company_id = c.id
+                    WHERE p.id = @id AND (pr.owner_id = @ownerId OR c.owner_id = @ownerId)`);
 
         if (result.recordset.length === 0) {
             return res.status(404).json({ error: 'Payment not found' });
@@ -933,10 +1423,24 @@ app.get('/api/payments/:id', async (req, res) => {
     }
 });
 
-app.post('/api/payments', async (req, res) => {
+app.post('/api/payments', requireAuth, async (req, res) => {
     const { tenant_id, payment_date, amount, payment_method, check_number, paid_in_full, notes } = req.body;
     try {
         const pool = await poolPromise;
+
+        // Verify tenant ownership
+        const ownerCheck = await pool.request()
+            .input('tenantId', sql.Int, tenant_id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT t.id FROM tenants t
+                    LEFT JOIN properties p ON t.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE t.id = @tenantId AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to add payment for this tenant' });
+        }
+
         const result = await pool.request()
             .input('tenant_id', sql.Int, tenant_id)
             .input('payment_date', sql.Date, payment_date)
@@ -955,11 +1459,26 @@ app.post('/api/payments', async (req, res) => {
     }
 });
 
-app.put('/api/payments/:id', async (req, res) => {
+app.put('/api/payments/:id', requireAuth, async (req, res) => {
     const { tenant_id, payment_date, amount, payment_method, check_number, paid_in_full, notes } = req.body;
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify payment ownership through tenant
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT rp.id FROM rent_payments rp
+                    LEFT JOIN tenants t ON rp.tenant_id = t.id
+                    LEFT JOIN properties p ON t.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE rp.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to modify this payment' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .input('tenant_id', sql.Int, tenant_id)
@@ -979,10 +1498,25 @@ app.put('/api/payments/:id', async (req, res) => {
     }
 });
 
-app.delete('/api/payments/:id', async (req, res) => {
+app.delete('/api/payments/:id', requireAuth, async (req, res) => {
     const { id } = req.params;
     try {
         const pool = await poolPromise;
+
+        // Verify payment ownership through tenant
+        const ownerCheck = await pool.request()
+            .input('id', sql.Int, id)
+            .input('ownerId', sql.Int, req.ownerId)
+            .query(`SELECT rp.id FROM rent_payments rp
+                    LEFT JOIN tenants t ON rp.tenant_id = t.id
+                    LEFT JOIN properties p ON t.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE rp.id = @id AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        if (ownerCheck.recordset.length === 0) {
+            return res.status(403).json({ error: 'Not authorized to delete this payment' });
+        }
+
         await pool.request()
             .input('id', sql.Int, id)
             .query('DELETE FROM rent_payments WHERE id = @id');
@@ -994,35 +1528,68 @@ app.delete('/api/payments/:id', async (req, res) => {
 });
 
 // ==================== DASHBOARD/REPORTS ROUTES ====================
-app.get('/api/dashboard', async (req, res) => {
+app.get('/api/dashboard', requireAuth, async (req, res) => {
     try {
         const pool = await poolPromise;
         const today = new Date();
         const currentMonth = today.getMonth() + 1;
         const currentYear = today.getFullYear();
+        const ownerId = req.ownerId;
 
-        // Get all dashboard stats
-        const propertiesCount = await pool.request().query('SELECT COUNT(*) as total_properties FROM properties');
+        // Get all dashboard stats for this owner's properties
+        const propertiesCount = await pool.request()
+            .input('ownerId', sql.Int, ownerId)
+            .query(`SELECT COUNT(*) as total_properties
+                    FROM properties p
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE p.owner_id = @ownerId OR c.owner_id = @ownerId`);
 
         // Count tenants with active leases (lease end_date >= today)
         const activeTenantsCount = await pool.request()
+            .input('ownerId', sql.Int, ownerId)
             .query(`SELECT COUNT(DISTINCT t.id) as active_tenants
                     FROM tenants t
                     INNER JOIN leases l ON t.id = l.tenant_id
-                    WHERE l.end_date >= CAST(GETDATE() AS DATE)`);
+                    INNER JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.end_date >= CAST(GETDATE() AS DATE)
+                    AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
 
         const activeLeases = await pool.request()
-            .query(`SELECT COUNT(*) as active_leases FROM leases WHERE end_date >= CAST(GETDATE() AS DATE)`);
+            .input('ownerId', sql.Int, ownerId)
+            .query(`SELECT COUNT(*) as active_leases
+                    FROM leases l
+                    INNER JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.end_date >= CAST(GETDATE() AS DATE)
+                    AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
         const monthlyRent = await pool.request()
-            .query(`SELECT SUM(rent) as monthly_rent FROM leases WHERE end_date >= CAST(GETDATE() AS DATE)`);
+            .input('ownerId', sql.Int, ownerId)
+            .query(`SELECT SUM(l.rent) as monthly_rent
+                    FROM leases l
+                    INNER JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.end_date >= CAST(GETDATE() AS DATE)
+                    AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
         const monthlyExpenses = await pool.request()
             .input('month', sql.Int, currentMonth)
             .input('year', sql.Int, currentYear)
-            .query(`SELECT SUM(amount) as monthly_expenses FROM expenses
-                    WHERE MONTH(date) = @month AND YEAR(date) = @year`);
+            .input('ownerId', sql.Int, ownerId)
+            .query(`SELECT SUM(e.amount) as monthly_expenses
+                    FROM expenses e
+                    LEFT JOIN properties p ON e.property_id = p.id
+                    LEFT JOIN companies c ON e.company_id = c.id
+                    LEFT JOIN companies pc ON p.company_id = pc.id
+                    WHERE MONTH(e.date) = @month AND YEAR(e.date) = @year
+                    AND (c.owner_id = @ownerId OR p.owner_id = @ownerId OR pc.owner_id = @ownerId)`);
         const expiringLeases = await pool.request()
-            .query(`SELECT COUNT(*) as expiring_leases FROM leases
-                    WHERE end_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 30, CAST(GETDATE() AS DATE))`);
+            .input('ownerId', sql.Int, ownerId)
+            .query(`SELECT COUNT(*) as expiring_leases
+                    FROM leases l
+                    INNER JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.end_date BETWEEN CAST(GETDATE() AS DATE) AND DATEADD(day, 30, CAST(GETDATE() AS DATE))
+                    AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
 
         res.json({
             totalProperties: propertiesCount.recordset[0].total_properties,

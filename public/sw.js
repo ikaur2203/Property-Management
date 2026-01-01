@@ -1,8 +1,9 @@
 // Service Worker for Property Management PWA
-const CACHE_NAME = 'property-management-v2.15.0';
+const CACHE_NAME = 'property-management-v2.17.0';
 const urlsToCache = [
   '/',
   '/index.html',
+  '/login.html',
   '/manifest.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
@@ -52,7 +53,13 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Handle API requests differently
+  // Never cache authentication requests - always go to network
+  if (event.request.url.includes('/api/auth/')) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
+  // Handle other API requests differently
   if (event.request.url.includes('/api/')) {
     event.respondWith(
       fetch(event.request)
