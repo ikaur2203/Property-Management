@@ -2340,7 +2340,7 @@
                     return false;
                 });
 
-                const rentAmount = activeLease ? `$${activeLease.rent.toLocaleString()}` : 'No Lease';
+                const rentAmount = activeLease ? formatCurrency(activeLease.rent) : 'No Lease';
                 const status = activeLease ? getLeaseStatus(activeLease) : 'No Lease';
 
                 const row = document.createElement('tr');
@@ -2385,8 +2385,8 @@
                     <td>${propertyAddress}</td>
                     <td>${formatDate(lease.start_date)}</td>
                     <td>${formatDate(lease.end_date)}</td>
-                    <td>${lease.rent.toLocaleString()}</td>
-                    <td>${lease.deposit.toLocaleString()}</td>
+                    <td>${formatCurrency(lease.rent)}</td>
+                    <td>${formatCurrency(lease.deposit)}</td>
                     <td>${documentHtml}</td>
                     <td><span class="status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span></td>
                     <td>
@@ -2422,7 +2422,7 @@
                     <td>${assignedTo}</td>
                     <td>${expense.category}</td>
                     <td>${expense.description}</td>
-                    <td>$${expense.amount.toLocaleString()}</td>
+                    <td>${formatCurrency(expense.amount)}</td>
                     <td>
                         <button class="btn" onclick="openExpenseModal(${expense.id})">Edit</button>
                         <button class="btn btn-danger" onclick="deleteExpense(${expense.id})">Delete</button>
