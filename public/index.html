@@ -692,6 +692,12 @@
                     <label>Year</label>
                     <select id="paymentYear" onchange="loadPayments(); loadPaymentSummary();"></select>
                 </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Tenant</label>
+                    <select id="paymentTenantFilter" onchange="loadPayments(); loadPaymentSummary();">
+                        <option value="">All Tenants</option>
+                    </select>
+                </div>
             </div>
 
             <input type="text" class="search-box" placeholder="Search payments..." onkeyup="filterTable('paymentsTable', this.value)">
@@ -748,23 +754,45 @@
         <!-- Reports Tab -->
         <div id="reports" class="tab-content">
             <h2>Financial Reports</h2>
-            
-            <div class="form-row">
+
+            <!-- Report Type Selection -->
+            <div class="form-row" style="margin-bottom: 20px;">
+                <div class="form-group">
+                    <label>Report Type</label>
+                    <select id="reportType" onchange="toggleReportType()">
+                        <option value="summary">Financial Summary</option>
+                        <option value="tenantPayments">Tenant Payment History</option>
+                        <option value="expenses">Expense Report</option>
+                    </select>
+                </div>
                 <div class="form-group">
                     <label>Report Period</label>
                     <select id="reportPeriod">
                         <option value="thisMonth">This Month</option>
                         <option value="lastMonth">Last Month</option>
                         <option value="thisYear">This Year</option>
-                        <option value="custom">Custom Range</option>
+                        <option value="allTime">All Time</option>
+                    </select>
+                </div>
+                <div class="form-group" id="reportTenantGroup" style="display: none;">
+                    <label>Tenant</label>
+                    <select id="reportTenantFilter">
+                        <option value="">All Tenants</option>
+                    </select>
+                </div>
+                <div class="form-group" id="reportCategoryGroup" style="display: none;">
+                    <label>Category</label>
+                    <select id="reportCategoryFilter">
+                        <option value="">All Categories</option>
                     </select>
                 </div>
                 <div class="form-group">
                     <button class="btn" onclick="generateReport()">Generate Report</button>
                 </div>
             </div>
-            
-            <div id="reportResults">
+
+            <!-- Financial Summary Report -->
+            <div id="summaryReportResults">
                 <div class="summary-cards">
                     <div class="summary-card">
                         <h3>Total Income</h3>
@@ -783,6 +811,74 @@
                         <div class="amount" id="reportROI">0%</div>
                     </div>
                 </div>
+            </div>
+
+            <!-- Tenant Payment Report -->
+            <div id="tenantPaymentReportResults" style="display: none;">
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <h3>Total Payments</h3>
+                        <div class="amount" id="tenantReportTotal">$0</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Payment Count</h3>
+                        <div class="amount" id="tenantReportCount">0</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Avg Payment</h3>
+                        <div class="amount" id="tenantReportAvg">$0</div>
+                    </div>
+                </div>
+                <h3 style="margin-top: 20px;">Payment Details</h3>
+                <table class="data-table" id="tenantPaymentReportTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Tenant</th>
+                            <th>Property</th>
+                            <th>Amount</th>
+                            <th>Method</th>
+                            <th>Status</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tenantPaymentReportBody">
+                        <tr><td colspan="7" class="no-data">Generate a report to see data</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Expense Report -->
+            <div id="expenseReportResults" style="display: none;">
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <h3>Total Expenses</h3>
+                        <div class="amount" id="expenseReportTotal">$0</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Expense Count</h3>
+                        <div class="amount" id="expenseReportCount">0</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Avg Expense</h3>
+                        <div class="amount" id="expenseReportAvg">$0</div>
+                    </div>
+                </div>
+                <h3 style="margin-top: 20px;">Expense Details</h3>
+                <table class="data-table" id="expenseReportTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Category</th>
+                            <th>Assigned To</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expenseReportBody">
+                        <tr><td colspan="5" class="no-data">Generate a report to see data</td></tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
@@ -1067,18 +1163,22 @@
                     </div>
                     <div class="form-group">
                         <label>Category*</label>
-                        <select id="expenseCategory" required onchange="toggleExpenseAssignment()">
+                        <select id="expenseCategory" required onchange="handleExpenseCategoryChange()">
                             <option value="">Select Category</option>
                             <option value="Maintenance">Maintenance</option>
                             <option value="Repairs">Repairs</option>
+                            <option value="Utilities">Utilities</option>
                             <option value="Water Bill">Water Bill</option>
+                            <option value="Gardening">Gardening</option>
+                            <option value="Home Demo">Home Demo</option>
                             <option value="Insurance">Insurance</option>
-                            <option value="Property Tax">Property Tax</option>
                             <option value="Mortgage">Mortgage Payment</option>
                             <option value="Legal">Legal Fees</option>
                             <option value="Advertising">Advertising</option>
                             <option value="Other">Other</option>
+                            <option value="__custom__">+ Add Custom Category</option>
                         </select>
+                        <input type="text" id="customExpenseCategory" placeholder="Enter custom category..." style="display: none; margin-top: 10px;">
                     </div>
                 </div>
                 <div class="form-row">
@@ -1376,6 +1476,7 @@
         async function loadTenants() {
             tenants = await apiRequest('/tenants');
             renderTenantsTable();
+            updatePaymentTenantFilterDropdown();
         }
 
         async function loadLeases() {
@@ -1395,19 +1496,30 @@
         async function loadPayments() {
             try {
                 const viewType = document.getElementById('paymentViewType').value;
+                const tenantFilter = document.getElementById('paymentTenantFilter').value;
                 let url = '/payments';
+                let params = [];
 
                 if (viewType === 'year') {
                     const year = document.getElementById('paymentYear').value;
                     if (year) {
-                        url = `/payments?year=${year}`;
+                        params.push(`year=${year}`);
                     }
                 } else {
                     const monthInput = document.getElementById('paymentMonth').value;
                     if (monthInput) {
                         const [year, month] = monthInput.split('-');
-                        url = `/payments?month=${month}&year=${year}`;
+                        params.push(`month=${month}`);
+                        params.push(`year=${year}`);
                     }
+                }
+
+                if (tenantFilter) {
+                    params.push(`tenant_id=${tenantFilter}`);
+                }
+
+                if (params.length > 0) {
+                    url += '?' + params.join('&');
                 }
 
                 const paymentsData = await apiRequest(url);
@@ -2114,11 +2226,21 @@
                 company_id = document.getElementById('expenseCompany').value || null;
             }
 
+            // Handle custom category
+            let category = document.getElementById('expenseCategory').value;
+            if (category === '__custom__') {
+                category = document.getElementById('customExpenseCategory').value.trim();
+                if (!category) {
+                    alert('Please enter a custom category name');
+                    return;
+                }
+            }
+
             const expenseData = {
                 date: document.getElementById('expenseDate').value,
                 property_id: property_id,
                 company_id: company_id,
-                category: document.getElementById('expenseCategory').value,
+                category: category,
                 amount: parseFloat(document.getElementById('expenseAmount').value),
                 description: document.getElementById('expenseDescription').value
             };
@@ -2549,20 +2671,243 @@
             }
         }
         
+        // Report type toggle
+        function toggleReportType() {
+            const reportType = document.getElementById('reportType').value;
+            const tenantGroup = document.getElementById('reportTenantGroup');
+            const categoryGroup = document.getElementById('reportCategoryGroup');
+            const summaryResults = document.getElementById('summaryReportResults');
+            const tenantResults = document.getElementById('tenantPaymentReportResults');
+            const expenseResults = document.getElementById('expenseReportResults');
+
+            // Hide all result sections
+            summaryResults.style.display = 'none';
+            tenantResults.style.display = 'none';
+            expenseResults.style.display = 'none';
+            tenantGroup.style.display = 'none';
+            categoryGroup.style.display = 'none';
+
+            // Show relevant sections based on report type
+            if (reportType === 'summary') {
+                summaryResults.style.display = 'block';
+            } else if (reportType === 'tenantPayments') {
+                tenantResults.style.display = 'block';
+                tenantGroup.style.display = 'block';
+                updateReportTenantDropdown();
+            } else if (reportType === 'expenses') {
+                expenseResults.style.display = 'block';
+                categoryGroup.style.display = 'block';
+                updateReportCategoryDropdown();
+            }
+        }
+
+        function updateReportTenantDropdown() {
+            const select = document.getElementById('reportTenantFilter');
+            select.innerHTML = '<option value="">All Tenants</option>';
+            tenants.forEach(tenant => {
+                const option = document.createElement('option');
+                option.value = tenant.id;
+                option.textContent = tenant.name;
+                select.appendChild(option);
+            });
+        }
+
+        function updateReportCategoryDropdown() {
+            const select = document.getElementById('reportCategoryFilter');
+            const categories = [...new Set(expenses.map(e => e.category))];
+            select.innerHTML = '<option value="">All Categories</option>';
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                select.appendChild(option);
+            });
+        }
+
+        function updatePaymentTenantFilterDropdown() {
+            const select = document.getElementById('paymentTenantFilter');
+            const currentValue = select.value;
+            select.innerHTML = '<option value="">All Tenants</option>';
+            tenants.forEach(tenant => {
+                const option = document.createElement('option');
+                option.value = tenant.id;
+                option.textContent = tenant.name;
+                select.appendChild(option);
+            });
+            select.value = currentValue;
+        }
+
         // Report generation
         async function generateReport() {
+            const reportType = document.getElementById('reportType').value;
             const period = document.getElementById('reportPeriod').value;
-            
+
+            if (reportType === 'summary') {
+                await generateSummaryReport(period);
+            } else if (reportType === 'tenantPayments') {
+                await generateTenantPaymentReport(period);
+            } else if (reportType === 'expenses') {
+                await generateExpenseReport(period);
+            }
+        }
+
+        async function generateSummaryReport(period) {
             try {
                 const reportData = await apiRequest(`/reports?period=${period}`);
-                
+
                 document.getElementById('reportIncome').textContent = formatCurrency(reportData.totalIncome);
                 document.getElementById('reportExpenses').textContent = formatCurrency(reportData.totalExpenses);
                 document.getElementById('reportProfit').textContent = formatCurrency(reportData.netProfit);
                 document.getElementById('reportROI').textContent = reportData.roi + '%';
             } catch (error) {
-                console.error('Failed to generate report:', error);
+                console.error('Failed to generate summary report:', error);
             }
+        }
+
+        async function generateTenantPaymentReport(period) {
+            const tenantFilter = document.getElementById('reportTenantFilter').value;
+            const { startDate, endDate } = getReportDateRange(period);
+
+            try {
+                // Get all payments
+                const allPayments = await apiRequest('/payments');
+
+                // Filter by date range and tenant
+                let filteredPayments = allPayments.filter(p => {
+                    const paymentDate = new Date(p.payment_date);
+                    const inDateRange = paymentDate >= startDate && paymentDate <= endDate;
+                    const matchesTenant = !tenantFilter || p.tenant_id == tenantFilter;
+                    return inDateRange && matchesTenant;
+                });
+
+                // Calculate totals
+                const totalAmount = filteredPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+                const paymentCount = filteredPayments.length;
+                const avgPayment = paymentCount > 0 ? totalAmount / paymentCount : 0;
+
+                // Update summary cards
+                document.getElementById('tenantReportTotal').textContent = formatCurrency(totalAmount);
+                document.getElementById('tenantReportCount').textContent = paymentCount;
+                document.getElementById('tenantReportAvg').textContent = formatCurrency(avgPayment);
+
+                // Render table
+                const tbody = document.getElementById('tenantPaymentReportBody');
+                if (filteredPayments.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="no-data">No payments found for selected criteria</td></tr>';
+                } else {
+                    tbody.innerHTML = '';
+                    filteredPayments.forEach(payment => {
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${formatDate(payment.payment_date)}</td>
+                            <td>${payment.tenant_name || 'Unknown'}</td>
+                            <td>${payment.property_address || '-'}</td>
+                            <td>${formatCurrency(payment.amount)}</td>
+                            <td>${payment.payment_method}</td>
+                            <td>${payment.paid_in_full ? '<span style="color: green;">Paid in Full</span>' : '<span style="color: orange;">Partial</span>'}</td>
+                            <td>${payment.notes || '-'}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to generate tenant payment report:', error);
+            }
+        }
+
+        async function generateExpenseReport(period) {
+            const categoryFilter = document.getElementById('reportCategoryFilter').value;
+            const { startDate, endDate } = getReportDateRange(period);
+
+            try {
+                // Get all expenses
+                const allExpenses = await apiRequest('/expenses');
+
+                // Filter by date range and category
+                let filteredExpenses = allExpenses.filter(e => {
+                    const expenseDate = new Date(e.date);
+                    const inDateRange = expenseDate >= startDate && expenseDate <= endDate;
+                    const matchesCategory = !categoryFilter || e.category === categoryFilter;
+                    return inDateRange && matchesCategory;
+                });
+
+                // Calculate totals
+                const totalAmount = filteredExpenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
+                const expenseCount = filteredExpenses.length;
+                const avgExpense = expenseCount > 0 ? totalAmount / expenseCount : 0;
+
+                // Update summary cards
+                document.getElementById('expenseReportTotal').textContent = formatCurrency(totalAmount);
+                document.getElementById('expenseReportCount').textContent = expenseCount;
+                document.getElementById('expenseReportAvg').textContent = formatCurrency(avgExpense);
+
+                // Render table
+                const tbody = document.getElementById('expenseReportBody');
+                if (filteredExpenses.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="no-data">No expenses found for selected criteria</td></tr>';
+                } else {
+                    tbody.innerHTML = '';
+                    filteredExpenses.forEach(expense => {
+                        const assignedTo = expense.company_name || expense.property_address || 'General';
+                        const row = document.createElement('tr');
+                        row.innerHTML = `
+                            <td>${formatDate(expense.date)}</td>
+                            <td>${expense.category}</td>
+                            <td>${assignedTo}</td>
+                            <td>${expense.description}</td>
+                            <td>${formatCurrency(expense.amount)}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to generate expense report:', error);
+            }
+        }
+
+        function getReportDateRange(period) {
+            const today = new Date();
+            let startDate, endDate;
+
+            switch (period) {
+                case 'thisMonth':
+                    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                    break;
+                case 'lastMonth':
+                    startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                    endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                    break;
+                case 'thisYear':
+                    startDate = new Date(today.getFullYear(), 0, 1);
+                    endDate = new Date(today.getFullYear(), 11, 31);
+                    break;
+                case 'allTime':
+                default:
+                    startDate = new Date(2000, 0, 1);
+                    endDate = new Date(2100, 11, 31);
+                    break;
+            }
+
+            return { startDate, endDate };
+        }
+
+        // Handle custom expense category
+        function handleExpenseCategoryChange() {
+            const select = document.getElementById('expenseCategory');
+            const customInput = document.getElementById('customExpenseCategory');
+
+            if (select.value === '__custom__') {
+                customInput.style.display = 'block';
+                customInput.required = true;
+                customInput.focus();
+            } else {
+                customInput.style.display = 'none';
+                customInput.required = false;
+                customInput.value = '';
+            }
+
+            toggleExpenseAssignment();
         }
         
         // Close modals when clicking outside

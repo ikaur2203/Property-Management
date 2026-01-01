@@ -793,7 +793,7 @@ app.delete('/api/expenses/:id', async (req, res) => {
 
 // ==================== RENT PAYMENTS ROUTES ====================
 app.get('/api/payments', async (req, res) => {
-    const { month, year } = req.query;
+    const { month, year, tenant_id } = req.query;
     try {
         const pool = await poolPromise;
         let query = `SELECT p.*, t.name as tenant_name, t.phone as tenant_phone,
@@ -803,12 +803,20 @@ app.get('/api/payments', async (req, res) => {
                      LEFT JOIN leases l ON l.tenant_id = p.tenant_id AND l.end_date >= CAST(GETDATE() AS DATE)
                      LEFT JOIN properties pr ON l.property_id = pr.id`;
 
+        let conditions = [];
+
         if (month && year) {
-            // Filter by specific month and year
-            query += ` WHERE MONTH(p.payment_date) = @month AND YEAR(p.payment_date) = @year`;
+            conditions.push(`MONTH(p.payment_date) = @month AND YEAR(p.payment_date) = @year`);
         } else if (year) {
-            // Filter by year only (for yearly view)
-            query += ` WHERE YEAR(p.payment_date) = @year`;
+            conditions.push(`YEAR(p.payment_date) = @year`);
+        }
+
+        if (tenant_id) {
+            conditions.push(`p.tenant_id = @tenant_id`);
+        }
+
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
         }
 
         query += ' ORDER BY p.payment_date DESC';
@@ -819,6 +827,9 @@ app.get('/api/payments', async (req, res) => {
             request.input('year', sql.Int, parseInt(year));
         } else if (year) {
             request.input('year', sql.Int, parseInt(year));
+        }
+        if (tenant_id) {
+            request.input('tenant_id', sql.Int, parseInt(tenant_id));
         }
 
         const result = await request.query(query);
