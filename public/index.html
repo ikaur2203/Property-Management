@@ -1014,7 +1014,7 @@
                 <div class="form-row">
                     <div class="form-group">
                         <label>Amount*</label>
-                        <input type="number" id="paymentAmount" step="0.01" required>
+                        <input type="number" id="paymentAmount" step="0.01" required oninput="checkPaidInFull()">
                         <small id="expectedRentNote" style="color: #718096;"></small>
                     </div>
                     <div class="form-group">
@@ -1691,6 +1691,7 @@
 
         async function openPaymentModal(id = null) {
             currentEditId = id;
+            currentExpectedRent = 0; // Reset expected rent
             await updatePaymentTenantDropdown();
 
             if (id) {
@@ -1715,6 +1716,9 @@
                         } else {
                             document.getElementById('checkNumberRow').style.display = 'none';
                         }
+
+                        // Update expected rent display for the selected tenant
+                        await updateExpectedRent();
                     }
                 } catch (error) {
                     console.error('Failed to load payment:', error);
@@ -1726,6 +1730,7 @@
                 const today = new Date().toISOString().split('T')[0];
                 document.getElementById('paymentDate').value = today;
                 document.getElementById('checkNumberRow').style.display = 'none';
+                document.getElementById('expectedRentNote').textContent = '';
             }
             document.getElementById('paymentModal').style.display = 'block';
         }
@@ -1807,12 +1812,15 @@
             }
         }
 
+        let currentExpectedRent = 0; // Store expected rent for comparison
+
         async function updateExpectedRent() {
             const tenantId = document.getElementById('paymentTenant').value;
             const noteElement = document.getElementById('expectedRentNote');
 
             if (!tenantId) {
                 noteElement.textContent = '';
+                currentExpectedRent = 0;
                 return;
             }
 
@@ -1822,17 +1830,31 @@
                 const activeLease = leases.find(l => l.tenant_id == tenantId && new Date(l.end_date) >= new Date());
 
                 if (activeLease) {
+                    currentExpectedRent = parseFloat(activeLease.rent) || 0;
                     noteElement.textContent = `Expected rent: ${formatCurrency(activeLease.rent)}`;
                     // Auto-fill the amount if empty
                     const amountInput = document.getElementById('paymentAmount');
                     if (!amountInput.value) {
                         amountInput.value = activeLease.rent;
+                        checkPaidInFull(); // Check after auto-fill
                     }
                 } else {
+                    currentExpectedRent = 0;
                     noteElement.textContent = 'No active lease found';
                 }
             } catch (error) {
                 console.error('Failed to get expected rent:', error);
+            }
+        }
+
+        function checkPaidInFull() {
+            const amountInput = document.getElementById('paymentAmount');
+            const paidInFullCheckbox = document.getElementById('paymentPaidInFull');
+            const amount = parseFloat(amountInput.value) || 0;
+
+            // Auto-check if amount is >= expected rent, auto-uncheck if less
+            if (currentExpectedRent > 0) {
+                paidInFullCheckbox.checked = amount >= currentExpectedRent;
             }
         }
 
