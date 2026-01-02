@@ -183,11 +183,19 @@
         .btn-danger {
             background: linear-gradient(135deg, #e53e3e, #c53030);
         }
-        
+
         .btn-danger:hover {
             box-shadow: 0 10px 25px rgba(229, 62, 62, 0.4);
         }
-        
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #4a5568, #2d3748);
+        }
+
+        .btn-secondary:hover {
+            box-shadow: 0 10px 25px rgba(74, 85, 104, 0.4);
+        }
+
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -763,6 +771,7 @@
                         <option value="summary">Financial Summary</option>
                         <option value="tenantPayments">Tenant Payment History</option>
                         <option value="expenses">Expense Report</option>
+                        <option value="unpaidRent">Unpaid Rent Report</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -846,6 +855,10 @@
                         <tr><td colspan="7" class="no-data">Generate a report to see data</td></tr>
                     </tbody>
                 </table>
+                <div class="export-buttons" style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button class="btn btn-secondary" onclick="exportToExcel('tenantPayment')">Export to Excel</button>
+                    <button class="btn btn-secondary" onclick="exportToPDF('tenantPayment')">Export to PDF</button>
+                </div>
             </div>
 
             <!-- Expense Report -->
@@ -879,6 +892,50 @@
                         <tr><td colspan="5" class="no-data">Generate a report to see data</td></tr>
                     </tbody>
                 </table>
+                <div class="export-buttons" style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button class="btn btn-secondary" onclick="exportToExcel('expense')">Export to Excel</button>
+                    <button class="btn btn-secondary" onclick="exportToPDF('expense')">Export to PDF</button>
+                </div>
+            </div>
+
+            <!-- Unpaid Rent Report -->
+            <div id="unpaidRentReportResults" style="display: none;">
+                <div class="summary-cards">
+                    <div class="summary-card" style="background: linear-gradient(135deg, #f56565, #c53030);">
+                        <h3 style="color: white;">Total Unpaid</h3>
+                        <div class="amount" id="unpaidRentTotal" style="color: white;">$0</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Tenants with Unpaid</h3>
+                        <div class="amount" id="unpaidRentTenantCount">0</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Months with Missing</h3>
+                        <div class="amount" id="unpaidRentMonthCount">0</div>
+                    </div>
+                </div>
+                <h3 style="margin-top: 20px;">Unpaid Rent Details</h3>
+                <table class="data-table" id="unpaidRentReportTable">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Tenant</th>
+                            <th>Property</th>
+                            <th>Expected Rent</th>
+                            <th>Amount Paid</th>
+                            <th>Amount Due</th>
+                            <th>Status</th>
+                            <th>Contact</th>
+                        </tr>
+                    </thead>
+                    <tbody id="unpaidRentReportBody">
+                        <tr><td colspan="8" class="no-data">Generate a report to see unpaid rent</td></tr>
+                    </tbody>
+                </table>
+                <div class="export-buttons" style="margin-top: 20px; display: flex; gap: 10px;">
+                    <button class="btn btn-secondary" onclick="exportToExcel('unpaidRent')">Export to Excel</button>
+                    <button class="btn btn-secondary" onclick="exportToPDF('unpaidRent')">Export to PDF</button>
+                </div>
             </div>
         </div>
     </div>
@@ -2743,13 +2800,17 @@
             const summaryResults = document.getElementById('summaryReportResults');
             const tenantResults = document.getElementById('tenantPaymentReportResults');
             const expenseResults = document.getElementById('expenseReportResults');
+            const unpaidRentResults = document.getElementById('unpaidRentReportResults');
+            const periodGroup = document.getElementById('reportPeriod').parentElement;
 
             // Hide all result sections
             summaryResults.style.display = 'none';
             tenantResults.style.display = 'none';
             expenseResults.style.display = 'none';
+            unpaidRentResults.style.display = 'none';
             tenantGroup.style.display = 'none';
             categoryGroup.style.display = 'none';
+            periodGroup.style.display = 'block';
 
             // Show relevant sections based on report type
             if (reportType === 'summary') {
@@ -2762,6 +2823,9 @@
                 expenseResults.style.display = 'block';
                 categoryGroup.style.display = 'block';
                 updateReportCategoryDropdown();
+            } else if (reportType === 'unpaidRent') {
+                unpaidRentResults.style.display = 'block';
+                periodGroup.style.display = 'none'; // Unpaid rent doesn't need period filter
             }
         }
 
@@ -2812,6 +2876,8 @@
                 await generateTenantPaymentReport(period);
             } else if (reportType === 'expenses') {
                 await generateExpenseReport(period);
+            } else if (reportType === 'unpaidRent') {
+                await generateUnpaidRentReport();
             }
         }
 
@@ -2954,6 +3020,190 @@
             }
 
             return { startDate, endDate };
+        }
+
+        // Generate Unpaid Rent Report
+        async function generateUnpaidRentReport() {
+            try {
+                const unpaidRentData = await apiRequest('/reports/unpaid-rent');
+
+                // Calculate summary stats
+                const totalUnpaid = unpaidRentData.reduce((sum, item) => sum + item.amount_due, 0);
+                const uniqueTenants = new Set(unpaidRentData.map(item => item.tenant_id)).size;
+                const monthCount = unpaidRentData.length;
+
+                // Update summary cards
+                document.getElementById('unpaidRentTotal').textContent = formatCurrency(totalUnpaid);
+                document.getElementById('unpaidRentTenantCount').textContent = uniqueTenants;
+                document.getElementById('unpaidRentMonthCount').textContent = monthCount;
+
+                // Render table
+                const tbody = document.getElementById('unpaidRentReportBody');
+                if (unpaidRentData.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="no-data" style="color: green;">All tenants are up to date with rent payments!</td></tr>';
+                } else {
+                    tbody.innerHTML = '';
+                    unpaidRentData.forEach(item => {
+                        const row = document.createElement('tr');
+                        const statusColor = item.status === 'Not Paid' ? '#c53030' : '#dd6b20';
+                        const contactInfo = item.tenant_phone || item.tenant_email || 'N/A';
+                        row.innerHTML = `
+                            <td><strong>${item.month}</strong></td>
+                            <td>${item.tenant_name}</td>
+                            <td>${item.property_address}</td>
+                            <td>${formatCurrency(item.expected_rent)}</td>
+                            <td>${formatCurrency(item.amount_paid)}</td>
+                            <td style="color: ${statusColor}; font-weight: bold;">${formatCurrency(item.amount_due)}</td>
+                            <td><span style="color: ${statusColor}; font-weight: bold;">${item.status}</span></td>
+                            <td>${contactInfo}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to generate unpaid rent report:', error);
+            }
+        }
+
+        // Store current report data for export
+        let currentReportData = {
+            tenantPayment: [],
+            expense: [],
+            unpaidRent: []
+        };
+
+        // Export to Excel (CSV format)
+        function exportToExcel(reportType) {
+            let csvContent = '';
+            let filename = '';
+            const today = new Date().toISOString().split('T')[0];
+
+            if (reportType === 'tenantPayment') {
+                filename = `tenant_payments_${today}.csv`;
+                csvContent = 'Date,Tenant,Property,Amount,Method,Status,Notes\n';
+                const rows = document.querySelectorAll('#tenantPaymentReportBody tr');
+                rows.forEach(row => {
+                    if (!row.querySelector('.no-data')) {
+                        const cells = row.querySelectorAll('td');
+                        const rowData = Array.from(cells).map(cell => {
+                            let text = cell.textContent.trim().replace(/"/g, '""');
+                            return `"${text}"`;
+                        });
+                        csvContent += rowData.join(',') + '\n';
+                    }
+                });
+            } else if (reportType === 'expense') {
+                filename = `expenses_${today}.csv`;
+                csvContent = 'Date,Category,Assigned To,Description,Amount\n';
+                const rows = document.querySelectorAll('#expenseReportBody tr');
+                rows.forEach(row => {
+                    if (!row.querySelector('.no-data')) {
+                        const cells = row.querySelectorAll('td');
+                        const rowData = Array.from(cells).map(cell => {
+                            let text = cell.textContent.trim().replace(/"/g, '""');
+                            return `"${text}"`;
+                        });
+                        csvContent += rowData.join(',') + '\n';
+                    }
+                });
+            } else if (reportType === 'unpaidRent') {
+                filename = `unpaid_rent_${today}.csv`;
+                csvContent = 'Month,Tenant,Property,Expected Rent,Amount Paid,Amount Due,Status,Contact\n';
+                const rows = document.querySelectorAll('#unpaidRentReportBody tr');
+                rows.forEach(row => {
+                    if (!row.querySelector('.no-data')) {
+                        const cells = row.querySelectorAll('td');
+                        const rowData = Array.from(cells).map(cell => {
+                            let text = cell.textContent.trim().replace(/"/g, '""');
+                            return `"${text}"`;
+                        });
+                        csvContent += rowData.join(',') + '\n';
+                    }
+                });
+            }
+
+            // Create and download the file
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(link.href);
+        }
+
+        // Export to PDF
+        function exportToPDF(reportType) {
+            let title = '';
+            let tableId = '';
+            let summaryHtml = '';
+
+            if (reportType === 'tenantPayment') {
+                title = 'Tenant Payment Report';
+                tableId = 'tenantPaymentReportTable';
+                summaryHtml = `
+                    <p><strong>Total Payments:</strong> ${document.getElementById('tenantReportTotal').textContent}</p>
+                    <p><strong>Payment Count:</strong> ${document.getElementById('tenantReportCount').textContent}</p>
+                    <p><strong>Average Payment:</strong> ${document.getElementById('tenantReportAvg').textContent}</p>
+                `;
+            } else if (reportType === 'expense') {
+                title = 'Expense Report';
+                tableId = 'expenseReportTable';
+                summaryHtml = `
+                    <p><strong>Total Expenses:</strong> ${document.getElementById('expenseReportTotal').textContent}</p>
+                    <p><strong>Expense Count:</strong> ${document.getElementById('expenseReportCount').textContent}</p>
+                    <p><strong>Average Expense:</strong> ${document.getElementById('expenseReportAvg').textContent}</p>
+                `;
+            } else if (reportType === 'unpaidRent') {
+                title = 'Unpaid Rent Report';
+                tableId = 'unpaidRentReportTable';
+                summaryHtml = `
+                    <p><strong>Total Unpaid:</strong> ${document.getElementById('unpaidRentTotal').textContent}</p>
+                    <p><strong>Tenants with Unpaid:</strong> ${document.getElementById('unpaidRentTenantCount').textContent}</p>
+                    <p><strong>Months with Missing:</strong> ${document.getElementById('unpaidRentMonthCount').textContent}</p>
+                `;
+            }
+
+            const table = document.getElementById(tableId);
+            const today = new Date().toLocaleDateString();
+
+            // Create print window
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>${title}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; margin: 20px; }
+                        h1 { color: #4a5568; margin-bottom: 10px; }
+                        .report-date { color: #718096; margin-bottom: 20px; }
+                        .summary { background: #f7fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+                        .summary p { margin: 5px 0; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                        th, td { border: 1px solid #e2e8f0; padding: 10px; text-align: left; }
+                        th { background: #667eea; color: white; }
+                        tr:nth-child(even) { background: #f7fafc; }
+                        @media print {
+                            body { margin: 0; }
+                            .no-print { display: none; }
+                        }
+                    </style>
+                </head>
+                <body>
+                    <h1>${title}</h1>
+                    <p class="report-date">Generated on: ${today}</p>
+                    <div class="summary">${summaryHtml}</div>
+                    ${table.outerHTML}
+                    <script>
+                        window.onload = function() {
+                            window.print();
+                            setTimeout(function() { window.close(); }, 100);
+                        };
+                    <\/script>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
         }
 
         // Handle custom expense category

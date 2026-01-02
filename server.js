@@ -328,6 +328,9 @@ app.use(cors({
     origin: true
 }));
 
+// Trust proxy for Azure App Service (required for secure cookies behind load balancer)
+app.set('trust proxy', 1);
+
 // Session configuration
 app.use(session({
     secret: process.env.SESSION_SECRET || 'property-management-secret-key-change-in-production',
@@ -336,7 +339,8 @@ app.use(session({
     cookie: {
         secure: process.env.NODE_ENV === 'production',
         httpOnly: true,
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        sameSite: 'lax'
     }
 }));
 
@@ -1599,6 +1603,187 @@ app.get('/api/dashboard', requireAuth, async (req, res) => {
             monthlyExpenses: monthlyExpenses.recordset[0].monthly_expenses || 0,
             expiringLeases: expiringLeases.recordset[0].expiring_leases
         });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ==================== REPORTS ROUTES ====================
+// Get financial summary report
+app.get('/api/reports', requireAuth, async (req, res) => {
+    const { period } = req.query;
+    const ownerId = req.ownerId;
+
+    try {
+        const pool = await poolPromise;
+        const today = new Date();
+        let startDate, endDate;
+
+        // Calculate date range based on period
+        switch (period) {
+            case 'thisMonth':
+                startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                break;
+            case 'lastMonth':
+                startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                break;
+            case 'thisYear':
+                startDate = new Date(today.getFullYear(), 0, 1);
+                endDate = new Date(today.getFullYear(), 11, 31);
+                break;
+            case 'allTime':
+            default:
+                startDate = new Date(2000, 0, 1);
+                endDate = new Date(2100, 11, 31);
+                break;
+        }
+
+        // Get total income (rent payments)
+        const incomeResult = await pool.request()
+            .input('ownerId', sql.Int, ownerId)
+            .input('startDate', sql.Date, startDate)
+            .input('endDate', sql.Date, endDate)
+            .query(`SELECT COALESCE(SUM(rp.amount), 0) as total_income
+                    FROM rent_payments rp
+                    LEFT JOIN tenants t ON rp.tenant_id = t.id
+                    LEFT JOIN properties p ON t.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE rp.payment_date BETWEEN @startDate AND @endDate
+                    AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)`);
+
+        // Get total expenses
+        const expenseResult = await pool.request()
+            .input('ownerId', sql.Int, ownerId)
+            .input('startDate', sql.Date, startDate)
+            .input('endDate', sql.Date, endDate)
+            .query(`SELECT COALESCE(SUM(e.amount), 0) as total_expenses
+                    FROM expenses e
+                    LEFT JOIN properties p ON e.property_id = p.id
+                    LEFT JOIN companies c ON e.company_id = c.id
+                    LEFT JOIN companies pc ON p.company_id = pc.id
+                    WHERE e.date BETWEEN @startDate AND @endDate
+                    AND (c.owner_id = @ownerId OR p.owner_id = @ownerId OR pc.owner_id = @ownerId)`);
+
+        const totalIncome = parseFloat(incomeResult.recordset[0].total_income) || 0;
+        const totalExpenses = parseFloat(expenseResult.recordset[0].total_expenses) || 0;
+        const netProfit = totalIncome - totalExpenses;
+        const roi = totalExpenses > 0 ? ((netProfit / totalExpenses) * 100).toFixed(1) : 0;
+
+        res.json({
+            totalIncome,
+            totalExpenses,
+            netProfit,
+            roi
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get unpaid rent report - tenants who haven't paid for specific months
+app.get('/api/reports/unpaid-rent', requireAuth, async (req, res) => {
+    const ownerId = req.ownerId;
+
+    try {
+        const pool = await poolPromise;
+        const today = new Date();
+
+        // Get all active leases with tenant info
+        const leasesResult = await pool.request()
+            .input('ownerId', sql.Int, ownerId)
+            .query(`SELECT l.id as lease_id, l.rent as expected_rent, l.start_date, l.end_date,
+                           t.id as tenant_id, t.name as tenant_name, t.phone as tenant_phone, t.email as tenant_email,
+                           p.address1 as property_address, p.city, p.state
+                    FROM leases l
+                    INNER JOIN tenants t ON l.tenant_id = t.id
+                    INNER JOIN properties p ON l.property_id = p.id
+                    LEFT JOIN companies c ON p.company_id = c.id
+                    WHERE l.end_date >= CAST(GETDATE() AS DATE)
+                    AND l.start_date <= CAST(GETDATE() AS DATE)
+                    AND (p.owner_id = @ownerId OR c.owner_id = @ownerId)
+                    ORDER BY t.name`);
+
+        const unpaidRentList = [];
+
+        // For each active lease, check which months are unpaid
+        for (const lease of leasesResult.recordset) {
+            // Get all payments for this tenant
+            const paymentsResult = await pool.request()
+                .input('tenantId', sql.Int, lease.tenant_id)
+                .query(`SELECT payment_date, amount, paid_in_full
+                        FROM rent_payments
+                        WHERE tenant_id = @tenantId
+                        ORDER BY payment_date DESC`);
+
+            const payments = paymentsResult.recordset;
+
+            // Check last 12 months for unpaid rent
+            const leaseStartDate = new Date(lease.start_date);
+            const leaseStartMonth = leaseStartDate.getUTCMonth();
+            const leaseStartYear = leaseStartDate.getUTCFullYear();
+            const currentMonth = today.getUTCMonth();
+            const currentYear = today.getUTCFullYear();
+
+            for (let i = 0; i < 12; i++) {
+                // Calculate the month/year to check
+                let checkMonth = currentMonth - i;
+                let checkYear = currentYear;
+                while (checkMonth < 0) {
+                    checkMonth += 12;
+                    checkYear -= 1;
+                }
+
+                // Skip if before lease start (compare year first, then month)
+                if (checkYear < leaseStartYear || (checkYear === leaseStartYear && checkMonth < leaseStartMonth)) {
+                    continue;
+                }
+
+                // Check if there's a payment for this month (use UTC to avoid timezone issues)
+                const monthPayments = payments.filter(p => {
+                    const paymentDate = new Date(p.payment_date);
+                    return paymentDate.getUTCMonth() === checkMonth &&
+                           paymentDate.getUTCFullYear() === checkYear;
+                });
+
+                const totalPaidThisMonth = monthPayments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+                const expectedRent = parseFloat(lease.expected_rent);
+
+                if (totalPaidThisMonth < expectedRent) {
+                    // Create a date object for display (UTC)
+                    const displayDate = new Date(Date.UTC(checkYear, checkMonth, 1));
+                    const monthName = displayDate.toLocaleString('default', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+                    const amountDue = expectedRent - totalPaidThisMonth;
+
+                    unpaidRentList.push({
+                        tenant_id: lease.tenant_id,
+                        tenant_name: lease.tenant_name,
+                        tenant_phone: lease.tenant_phone,
+                        tenant_email: lease.tenant_email,
+                        property_address: `${lease.property_address}, ${lease.city}, ${lease.state}`,
+                        month: monthName,
+                        month_date: displayDate.toISOString(),
+                        expected_rent: expectedRent,
+                        amount_paid: totalPaidThisMonth,
+                        amount_due: amountDue,
+                        status: totalPaidThisMonth === 0 ? 'Not Paid' : 'Partial'
+                    });
+                }
+            }
+        }
+
+        // Sort by month (most recent first) then by tenant name
+        unpaidRentList.sort((a, b) => {
+            const dateA = new Date(a.month_date);
+            const dateB = new Date(b.month_date);
+            if (dateB.getTime() !== dateA.getTime()) {
+                return dateB.getTime() - dateA.getTime();
+            }
+            return a.tenant_name.localeCompare(b.tenant_name);
+        });
+
+        res.json(unpaidRentList);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
