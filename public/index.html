@@ -357,26 +357,269 @@
             font-size: 1.1rem;
         }
         
+        /* Mobile Navigation Styles */
+        .mobile-menu-btn {
+            display: none;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 10px;
+            font-weight: 600;
+            cursor: pointer;
+            width: 100%;
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .mobile-menu-btn span {
+            margin-left: 8px;
+        }
+
+        /* Table wrapper for horizontal scroll */
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin-bottom: 20px;
+        }
+
+        /* Section header flex wrapper */
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .section-header h2 {
+            margin: 0;
+        }
+
+        /* User header bar */
+        .user-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
             }
-            
-            .header h1 {
-                font-size: 2rem;
+
+            .header {
+                padding: 20px 15px;
+                border-radius: 15px;
+                margin-bottom: 15px;
             }
-            
+
+            .header h1 {
+                font-size: 1.5rem;
+            }
+
+            .header p {
+                font-size: 0.9rem;
+            }
+
+            /* Mobile Navigation */
+            .mobile-menu-btn {
+                display: block;
+            }
+
+            .nav-tabs {
+                display: none;
+                flex-direction: column;
+                padding: 5px;
+                border-radius: 12px;
+                margin-bottom: 15px;
+            }
+
+            .nav-tabs.show {
+                display: flex;
+            }
+
+            .nav-tab {
+                padding: 12px 15px;
+                min-width: auto;
+                text-align: left;
+                border-radius: 8px;
+                margin: 2px 0;
+            }
+
+            /* Tab content */
+            .tab-content {
+                padding: 15px;
+                border-radius: 15px;
+            }
+
+            /* Form rows stack vertically */
             .form-row {
                 grid-template-columns: 1fr;
+                gap: 15px;
             }
-            
+
+            /* Summary cards */
+            .summary-cards {
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
+
+            .summary-card {
+                padding: 15px;
+                border-radius: 12px;
+            }
+
+            .summary-card h3 {
+                font-size: 0.85rem;
+            }
+
+            .summary-card .amount {
+                font-size: 1.4rem;
+            }
+
+            /* Section headers stack on mobile */
+            .section-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .section-header h2 {
+                font-size: 1.3rem;
+                margin-bottom: 10px;
+            }
+
+            .section-header .btn {
+                width: 100%;
+                text-align: center;
+            }
+
+            /* Data tables */
+            .table-wrapper {
+                margin: 0 -15px;
+                padding: 0 15px;
+                width: calc(100% + 30px);
+            }
+
             .data-table {
-                font-size: 14px;
+                font-size: 13px;
+                min-width: 600px;
             }
-            
+
             .data-table th,
             .data-table td {
                 padding: 10px 8px;
+                white-space: nowrap;
+            }
+
+            .data-table .btn {
+                padding: 8px 12px;
+                font-size: 12px;
+                margin: 2px;
+            }
+
+            /* Buttons */
+            .btn {
+                padding: 10px 16px;
+                font-size: 14px;
+            }
+
+            /* Search box */
+            .search-box {
+                font-size: 16px;
+                padding: 12px;
+            }
+
+            /* Modals */
+            .modal-content {
+                margin: 10px;
+                padding: 20px;
+                width: calc(100% - 20px);
+                max-height: calc(100vh - 20px);
+                border-radius: 15px;
+            }
+
+            .modal-content h2 {
+                font-size: 1.3rem;
+                padding-right: 30px;
+            }
+
+            /* Form inputs */
+            .form-group input,
+            .form-group select,
+            .form-group textarea {
+                font-size: 16px;
+                padding: 12px;
+            }
+
+            /* User header */
+            .user-header {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .user-info {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .user-info .btn {
+                width: 100%;
+            }
+
+            /* Status badges */
+            .status-badge {
+                padding: 4px 8px;
+                font-size: 11px;
+            }
+
+            /* Report sections */
+            #reportPeriodGroup,
+            #reportTenantGroup,
+            #reportCategoryGroup,
+            #customDateRangeGroup,
+            #customDateRangeEndGroup {
+                width: 100%;
+            }
+        }
+
+        /* Extra small screens */
+        @media (max-width: 480px) {
+            .header h1 {
+                font-size: 1.3rem;
+            }
+
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .summary-card .amount {
+                font-size: 1.6rem;
+            }
+
+            .nav-tab {
+                padding: 10px 12px;
+                font-size: 14px;
+            }
+
+            .data-table {
+                font-size: 12px;
+            }
+
+            .data-table th,
+            .data-table td {
+                padding: 8px 6px;
             }
         }
         
@@ -505,7 +748,10 @@
             <p>Manage your properties, tenants, and finances all in one place</p>
         </div>
         
-        <div class="nav-tabs">
+        <button class="mobile-menu-btn" onclick="toggleMobileMenu()" id="mobileMenuBtn">
+            Menu <span id="currentTabName">Dashboard</span>
+        </button>
+        <div class="nav-tabs" id="navTabs">
             <button class="nav-tab active" onclick="showTab('dashboard')">Dashboard</button>
             <button class="nav-tab" onclick="showTab('companies')">Companies</button>
             <button class="nav-tab" onclick="showTab('properties')">Properties</button>
@@ -545,120 +791,128 @@
         
         <!-- Companies Tab -->
         <div id="companies" class="tab-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="section-header">
                 <h2>Companies/LLCs Management</h2>
                 <button class="btn" onclick="openCompanyModal()">Add New Company</button>
             </div>
 
             <input type="text" class="search-box" placeholder="Search companies..." onkeyup="filterTable('companiesTable', this.value)">
 
-            <table class="data-table" id="companiesTable">
-                <thead>
-                    <tr>
-                        <th>Company Name</th>
-                        <th>Properties</th>
-                        <th>Notes</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="companiesTableBody">
-                    <tr>
-                        <td colspan="4" class="no-data">No companies added yet</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table class="data-table" id="companiesTable">
+                    <thead>
+                        <tr>
+                            <th>Company Name</th>
+                            <th>Properties</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="companiesTableBody">
+                        <tr>
+                            <td colspan="4" class="no-data">No companies added yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Properties Tab -->
         <div id="properties" class="tab-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="section-header">
                 <h2>Properties Management</h2>
                 <button class="btn" onclick="openPropertyModal()">Add New Property</button>
             </div>
 
             <input type="text" class="search-box" placeholder="Search properties..." onkeyup="filterTable('propertiesTable', this.value)">
 
-            <table class="data-table" id="propertiesTable">
-                <thead>
-                    <tr>
-                        <th>Address</th>
-                        <th>Type</th>
-                        <th>Company/LLC</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="propertiesTableBody">
-                    <tr>
-                        <td colspan="5" class="no-data">No properties added yet</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table class="data-table" id="propertiesTable">
+                    <thead>
+                        <tr>
+                            <th>Address</th>
+                            <th>Type</th>
+                            <th>Company/LLC</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="propertiesTableBody">
+                        <tr>
+                            <td colspan="5" class="no-data">No properties added yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         
         <!-- Tenants Tab -->
         <div id="tenants" class="tab-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="section-header">
                 <h2>Tenants Management</h2>
                 <button class="btn" onclick="openTenantModal()">Add New Tenant</button>
             </div>
-            
+
             <input type="text" class="search-box" placeholder="Search tenants..." onkeyup="filterTable('tenantsTable', this.value)">
-            
-            <table class="data-table" id="tenantsTable">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Property</th>
-                        <th>Floor/Unit</th>
-                        <th>Phone</th>
-                        <th>Rent Amount</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="tenantsTableBody">
-                    <tr>
-                        <td colspan="7" class="no-data">No tenants added yet</td>
-                    </tr>
-                </tbody>
-            </table>
+
+            <div class="table-wrapper">
+                <table class="data-table" id="tenantsTable">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>Property</th>
+                            <th>Floor/Unit</th>
+                            <th>Phone</th>
+                            <th>Rent Amount</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tenantsTableBody">
+                        <tr>
+                            <td colspan="7" class="no-data">No tenants added yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         
         <!-- Leases Tab -->
         <div id="leases" class="tab-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="section-header">
                 <h2>Lease Management</h2>
                 <button class="btn" onclick="openLeaseModal()">Add New Lease</button>
             </div>
-            
+
             <input type="text" class="search-box" placeholder="Search leases..." onkeyup="filterTable('leasesTable', this.value)">
-            
-            <table class="data-table" id="leasesTable">
-                <thead>
-                    <tr>
-                        <th>Tenant</th>
-                        <th>Property</th>
-                        <th>Start Date</th>
-                        <th>End Date</th>
-                        <th>Rent Amount</th>
-                        <th>Security Deposit</th>
-                        <th>Document</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="leasesTableBody">
-                    <tr>
-                        <td colspan="9" class="no-data">No leases added yet</td>
-                    </tr>
-                </tbody>
-            </table>
+
+            <div class="table-wrapper">
+                <table class="data-table" id="leasesTable">
+                    <thead>
+                        <tr>
+                            <th>Tenant</th>
+                            <th>Property</th>
+                            <th>Start Date</th>
+                            <th>End Date</th>
+                            <th>Rent Amount</th>
+                            <th>Security Deposit</th>
+                            <th>Document</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="leasesTableBody">
+                        <tr>
+                            <td colspan="9" class="no-data">No leases added yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Payments Tab -->
         <div id="payments" class="tab-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="section-header">
                 <h2>Rent Payments</h2>
                 <button class="btn" onclick="openPaymentModal()">Record Payment</button>
             </div>
@@ -710,53 +964,57 @@
 
             <input type="text" class="search-box" placeholder="Search payments..." onkeyup="filterTable('paymentsTable', this.value)">
 
-            <table class="data-table" id="paymentsTable">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Tenant</th>
-                        <th>Property</th>
-                        <th>Amount</th>
-                        <th>Method</th>
-                        <th>Check #</th>
-                        <th>Status</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="paymentsTableBody">
-                    <tr>
-                        <td colspan="8" class="no-data">No payments recorded yet</td>
-                    </tr>
-                </tbody>
-            </table>
+            <div class="table-wrapper">
+                <table class="data-table" id="paymentsTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Tenant</th>
+                            <th>Property</th>
+                            <th>Amount</th>
+                            <th>Method</th>
+                            <th>Check #</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="paymentsTableBody">
+                        <tr>
+                            <td colspan="8" class="no-data">No payments recorded yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <!-- Expenses Tab -->
         <div id="expenses" class="tab-content">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <div class="section-header">
                 <h2>Expenses Management</h2>
                 <button class="btn" onclick="openExpenseModal()">Add New Expense</button>
             </div>
-            
+
             <input type="text" class="search-box" placeholder="Search expenses..." onkeyup="filterTable('expensesTable', this.value)">
-            
-            <table class="data-table" id="expensesTable">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Property/Company</th>
-                        <th>Category</th>
-                        <th>Description</th>
-                        <th>Amount</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="expensesTableBody">
-                    <tr>
-                        <td colspan="6" class="no-data">No expenses added yet</td>
-                    </tr>
-                </tbody>
-            </table>
+
+            <div class="table-wrapper">
+                <table class="data-table" id="expensesTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Property/Company</th>
+                            <th>Category</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="expensesTableBody">
+                        <tr>
+                            <td colspan="6" class="no-data">No expenses added yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
         
         <!-- Reports Tab -->
@@ -1738,6 +1996,12 @@
         }
         
         // Tab functionality
+        // Mobile menu toggle
+        function toggleMobileMenu() {
+            const navTabs = document.getElementById('navTabs');
+            navTabs.classList.toggle('show');
+        }
+
         function showTab(tabName) {
             // Hide all tabs
             const tabs = document.querySelectorAll('.tab-content');
@@ -1750,6 +2014,22 @@
             // Show selected tab
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
+
+            // Update mobile menu button text
+            const tabNames = {
+                'dashboard': 'Dashboard',
+                'companies': 'Companies',
+                'properties': 'Properties',
+                'tenants': 'Tenants',
+                'leases': 'Leases',
+                'payments': 'Payments',
+                'expenses': 'Expenses',
+                'reports': 'Reports'
+            };
+            document.getElementById('currentTabName').textContent = tabNames[tabName] || tabName;
+
+            // Close mobile menu after selection
+            document.getElementById('navTabs').classList.remove('show');
 
             // Update dropdowns when showing certain tabs
             if (tabName === 'properties') {
