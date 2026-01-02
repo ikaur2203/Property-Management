@@ -622,7 +622,105 @@
                 padding: 8px 6px;
             }
         }
-        
+
+        /* Mobile Card View Styles */
+        .mobile-cards {
+            display: none;
+        }
+
+        .mobile-card {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #667eea;
+        }
+
+        .mobile-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .mobile-card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #2d3748;
+            margin: 0;
+        }
+
+        .mobile-card-subtitle {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-top: 2px;
+        }
+
+        .mobile-card-body {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .mobile-card-field {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .mobile-card-field.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .mobile-card-label {
+            font-size: 0.7rem;
+            color: #a0aec0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 2px;
+        }
+
+        .mobile-card-value {
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
+
+        .mobile-card-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e2e8f0;
+        }
+
+        .mobile-card-actions .btn {
+            flex: 1;
+            padding: 10px;
+            font-size: 13px;
+            margin: 0;
+        }
+
+        .mobile-card .status-badge {
+            font-size: 11px;
+            padding: 4px 10px;
+        }
+
+        .mobile-cards-empty {
+            text-align: center;
+            padding: 40px 20px;
+            color: #718096;
+        }
+
+        @media (max-width: 768px) {
+            .mobile-cards {
+                display: block;
+            }
+
+            .table-wrapper {
+                display: none;
+            }
+        }
+
         /* PWA specific styles */
         .pwa-install-prompt {
             position: fixed;
@@ -796,7 +894,10 @@
                 <button class="btn" onclick="openCompanyModal()">Add New Company</button>
             </div>
 
-            <input type="text" class="search-box" placeholder="Search companies..." onkeyup="filterTable('companiesTable', this.value)">
+            <input type="text" class="search-box" placeholder="Search companies..." onkeyup="filterTable('companiesTable', this.value); filterCards('companiesCards', this.value)">
+
+            <!-- Mobile Card View -->
+            <div class="mobile-cards" id="companiesCards"></div>
 
             <div class="table-wrapper">
                 <table class="data-table" id="companiesTable">
@@ -824,7 +925,10 @@
                 <button class="btn" onclick="openPropertyModal()">Add New Property</button>
             </div>
 
-            <input type="text" class="search-box" placeholder="Search properties..." onkeyup="filterTable('propertiesTable', this.value)">
+            <input type="text" class="search-box" placeholder="Search properties..." onkeyup="filterTable('propertiesTable', this.value); filterCards('propertiesCards', this.value)">
+
+            <!-- Mobile Card View -->
+            <div class="mobile-cards" id="propertiesCards"></div>
 
             <div class="table-wrapper">
                 <table class="data-table" id="propertiesTable">
@@ -853,7 +957,10 @@
                 <button class="btn" onclick="openTenantModal()">Add New Tenant</button>
             </div>
 
-            <input type="text" class="search-box" placeholder="Search tenants..." onkeyup="filterTable('tenantsTable', this.value)">
+            <input type="text" class="search-box" placeholder="Search tenants..." onkeyup="filterTable('tenantsTable', this.value); filterCards('tenantsCards', this.value)">
+
+            <!-- Mobile Card View -->
+            <div class="mobile-cards" id="tenantsCards"></div>
 
             <div class="table-wrapper">
                 <table class="data-table" id="tenantsTable">
@@ -884,7 +991,10 @@
                 <button class="btn" onclick="openLeaseModal()">Add New Lease</button>
             </div>
 
-            <input type="text" class="search-box" placeholder="Search leases..." onkeyup="filterTable('leasesTable', this.value)">
+            <input type="text" class="search-box" placeholder="Search leases..." onkeyup="filterTable('leasesTable', this.value); filterCards('leasesCards', this.value)">
+
+            <!-- Mobile Card View -->
+            <div class="mobile-cards" id="leasesCards"></div>
 
             <div class="table-wrapper">
                 <table class="data-table" id="leasesTable">
@@ -962,7 +1072,10 @@
                 </div>
             </div>
 
-            <input type="text" class="search-box" placeholder="Search payments..." onkeyup="filterTable('paymentsTable', this.value)">
+            <input type="text" class="search-box" placeholder="Search payments..." onkeyup="filterTable('paymentsTable', this.value); filterCards('paymentsCards', this.value)">
+
+            <!-- Mobile Card View -->
+            <div class="mobile-cards" id="paymentsCards"></div>
 
             <div class="table-wrapper">
                 <table class="data-table" id="paymentsTable">
@@ -994,7 +1107,10 @@
                 <button class="btn" onclick="openExpenseModal()">Add New Expense</button>
             </div>
 
-            <input type="text" class="search-box" placeholder="Search expenses..." onkeyup="filterTable('expensesTable', this.value)">
+            <input type="text" class="search-box" placeholder="Search expenses..." onkeyup="filterTable('expensesTable', this.value); filterCards('expensesCards', this.value)">
+
+            <!-- Mobile Card View -->
+            <div class="mobile-cards" id="expensesCards"></div>
 
             <div class="table-wrapper">
                 <table class="data-table" id="expensesTable">
@@ -2811,10 +2927,13 @@
         // Render table functions
         function renderCompaniesTable() {
             const tbody = document.getElementById('companiesTableBody');
+            const cardsContainer = document.getElementById('companiesCards');
             tbody.innerHTML = '';
+            cardsContainer.innerHTML = '';
 
             if (companies.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="4" class="no-data">No companies added yet</td></tr>';
+                cardsContainer.innerHTML = '<div class="mobile-cards-empty">No companies added yet</div>';
                 return;
             }
 
@@ -2826,6 +2945,7 @@
                     .map(p => p.address1 || 'Unknown')
                     .join(', ') || 'None';
 
+                // Table row
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td><strong>${company.name}</strong></td>
@@ -2837,15 +2957,45 @@
                     </td>
                 `;
                 tbody.appendChild(row);
+
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'mobile-card';
+                card.setAttribute('data-searchable', `${company.name} ${company.notes || ''}`);
+                card.innerHTML = `
+                    <div class="mobile-card-header">
+                        <div>
+                            <h3 class="mobile-card-title">${company.name}</h3>
+                        </div>
+                    </div>
+                    <div class="mobile-card-body">
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Properties</span>
+                            <span class="mobile-card-value">${propertyCount}</span>
+                        </div>
+                        <div class="mobile-card-field full-width">
+                            <span class="mobile-card-label">Notes</span>
+                            <span class="mobile-card-value">${company.notes || '-'}</span>
+                        </div>
+                    </div>
+                    <div class="mobile-card-actions">
+                        <button class="btn" onclick="openCompanyModal(${company.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteCompany(${company.id})">Delete</button>
+                    </div>
+                `;
+                cardsContainer.appendChild(card);
             });
         }
 
         function renderPropertiesTable() {
             const tbody = document.getElementById('propertiesTableBody');
+            const cardsContainer = document.getElementById('propertiesCards');
             tbody.innerHTML = '';
+            cardsContainer.innerHTML = '';
 
             if (properties.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="no-data">No properties added yet</td></tr>';
+                cardsContainer.innerHTML = '<div class="mobile-cards-empty">No properties added yet</div>';
                 return;
             }
 
@@ -2856,6 +3006,7 @@
                     .filter(Boolean)
                     .join(', ');
 
+                // Table row
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${fullAddress || 'No address'}</td>
@@ -2868,15 +3019,47 @@
                     </td>
                 `;
                 tbody.appendChild(row);
+
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'mobile-card';
+                card.setAttribute('data-searchable', `${fullAddress} ${property.type} ${companyName}`);
+                card.innerHTML = `
+                    <div class="mobile-card-header">
+                        <div>
+                            <h3 class="mobile-card-title">${property.address1 || 'No address'}</h3>
+                            <div class="mobile-card-subtitle">${property.city || ''} ${property.state || ''} ${property.zip || ''}</div>
+                        </div>
+                        <span class="status-badge status-${property.status.toLowerCase().replace(' ', '-')}">${property.status}</span>
+                    </div>
+                    <div class="mobile-card-body">
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Type</span>
+                            <span class="mobile-card-value">${property.type}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Company</span>
+                            <span class="mobile-card-value">${companyName}</span>
+                        </div>
+                    </div>
+                    <div class="mobile-card-actions">
+                        <button class="btn" onclick="openPropertyModal(${property.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteProperty(${property.id})">Delete</button>
+                    </div>
+                `;
+                cardsContainer.appendChild(card);
             });
         }
         
         function renderTenantsTable() {
             const tbody = document.getElementById('tenantsTableBody');
+            const cardsContainer = document.getElementById('tenantsCards');
             tbody.innerHTML = '';
+            cardsContainer.innerHTML = '';
 
             if (tenants.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="7" class="no-data">No tenants added yet</td></tr>';
+                cardsContainer.innerHTML = '<div class="mobile-cards-empty">No tenants added yet</div>';
                 return;
             }
 
@@ -2897,6 +3080,7 @@
                 const rentAmount = activeLease ? formatCurrency(activeLease.rent) : 'No Lease';
                 const status = activeLease ? getLeaseStatus(activeLease) : 'No Lease';
 
+                // Table row
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${tenant.name}</td>
@@ -2911,15 +3095,55 @@
                     </td>
                 `;
                 tbody.appendChild(row);
+
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'mobile-card';
+                card.setAttribute('data-searchable', `${tenant.name} ${propertyAddress} ${tenant.phone}`);
+                card.innerHTML = `
+                    <div class="mobile-card-header">
+                        <div>
+                            <h3 class="mobile-card-title">${tenant.name}</h3>
+                            <div class="mobile-card-subtitle">${propertyAddress}</div>
+                        </div>
+                        <span class="status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span>
+                    </div>
+                    <div class="mobile-card-body">
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Floor/Unit</span>
+                            <span class="mobile-card-value">${floor}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Phone</span>
+                            <span class="mobile-card-value">${tenant.phone}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Rent</span>
+                            <span class="mobile-card-value">${rentAmount}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Email</span>
+                            <span class="mobile-card-value">${tenant.email || '-'}</span>
+                        </div>
+                    </div>
+                    <div class="mobile-card-actions">
+                        <button class="btn" onclick="openTenantModal(${tenant.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteTenant(${tenant.id})">Delete</button>
+                    </div>
+                `;
+                cardsContainer.appendChild(card);
             });
         }
         
         function renderLeasesTable() {
             const tbody = document.getElementById('leasesTableBody');
+            const cardsContainer = document.getElementById('leasesCards');
             tbody.innerHTML = '';
+            cardsContainer.innerHTML = '';
 
             if (leases.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="9" class="no-data">No leases added yet</td></tr>';
+                cardsContainer.innerHTML = '<div class="mobile-cards-empty">No leases added yet</div>';
                 return;
             }
 
@@ -2933,6 +3157,7 @@
                     `<a href="/uploads/${lease.document_filename}" target="_blank" title="${lease.document_original_name}">📄 View</a>` :
                     '<span style="color: #ccc;">No doc</span>';
 
+                // Table row
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${tenantName}</td>
@@ -2949,15 +3174,59 @@
                     </td>
                 `;
                 tbody.appendChild(row);
+
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'mobile-card';
+                card.setAttribute('data-searchable', `${tenantName} ${propertyAddress}`);
+                card.innerHTML = `
+                    <div class="mobile-card-header">
+                        <div>
+                            <h3 class="mobile-card-title">${tenantName}</h3>
+                            <div class="mobile-card-subtitle">${propertyAddress}</div>
+                        </div>
+                        <span class="status-badge status-${status.toLowerCase().replace(' ', '-')}">${status}</span>
+                    </div>
+                    <div class="mobile-card-body">
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Start Date</span>
+                            <span class="mobile-card-value">${formatDate(lease.start_date)}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">End Date</span>
+                            <span class="mobile-card-value">${formatDate(lease.end_date)}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Rent</span>
+                            <span class="mobile-card-value">${formatCurrency(lease.rent)}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Deposit</span>
+                            <span class="mobile-card-value">${formatCurrency(lease.deposit)}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Document</span>
+                            <span class="mobile-card-value">${documentHtml}</span>
+                        </div>
+                    </div>
+                    <div class="mobile-card-actions">
+                        <button class="btn" onclick="openLeaseModal(${lease.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteLease(${lease.id})">Delete</button>
+                    </div>
+                `;
+                cardsContainer.appendChild(card);
             });
         }
         
         function renderExpensesTable() {
             const tbody = document.getElementById('expensesTableBody');
+            const cardsContainer = document.getElementById('expensesCards');
             tbody.innerHTML = '';
+            cardsContainer.innerHTML = '';
 
             if (expenses.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="6" class="no-data">No expenses added yet</td></tr>';
+                cardsContainer.innerHTML = '<div class="mobile-cards-empty">No expenses added yet</div>';
                 return;
             }
 
@@ -2970,6 +3239,7 @@
                     assignedTo = `🏢 ${expense.company_name}`;
                 }
 
+                // Table row
                 const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${formatDate(expense.date)}</td>
@@ -2983,24 +3253,60 @@
                     </td>
                 `;
                 tbody.appendChild(row);
+
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'mobile-card';
+                card.setAttribute('data-searchable', `${expense.category} ${expense.description} ${assignedTo}`);
+                card.innerHTML = `
+                    <div class="mobile-card-header">
+                        <div>
+                            <h3 class="mobile-card-title">${expense.category}</h3>
+                            <div class="mobile-card-subtitle">${assignedTo}</div>
+                        </div>
+                        <span style="font-size: 1.2rem; font-weight: 600; color: #e53e3e;">${formatCurrency(expense.amount)}</span>
+                    </div>
+                    <div class="mobile-card-body">
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Date</span>
+                            <span class="mobile-card-value">${formatDate(expense.date)}</span>
+                        </div>
+                        <div class="mobile-card-field full-width">
+                            <span class="mobile-card-label">Description</span>
+                            <span class="mobile-card-value">${expense.description || '-'}</span>
+                        </div>
+                    </div>
+                    <div class="mobile-card-actions">
+                        <button class="btn" onclick="openExpenseModal(${expense.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deleteExpense(${expense.id})">Delete</button>
+                    </div>
+                `;
+                cardsContainer.appendChild(card);
             });
         }
 
         function renderPaymentsTable(paymentsData) {
             const tbody = document.getElementById('paymentsTableBody');
+            const cardsContainer = document.getElementById('paymentsCards');
             tbody.innerHTML = '';
+            cardsContainer.innerHTML = '';
 
             if (!paymentsData || paymentsData.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="8" class="no-data">No payments recorded yet</td></tr>';
+                cardsContainer.innerHTML = '<div class="mobile-cards-empty">No payments recorded yet</div>';
                 return;
             }
 
             paymentsData.forEach(payment => {
-                const row = document.createElement('tr');
                 const statusBadge = payment.paid_in_full ?
                     '<span style="color: green; font-weight: bold;">✓ Paid in Full</span>' :
                     '<span style="color: orange; font-weight: bold;">Partial</span>';
 
+                const statusClass = payment.paid_in_full ? 'status-active' : 'status-ending-soon';
+                const statusText = payment.paid_in_full ? 'Paid in Full' : 'Partial';
+
+                // Table row
+                const row = document.createElement('tr');
                 row.innerHTML = `
                     <td>${formatDate(payment.payment_date)}</td>
                     <td>${payment.tenant_name || 'N/A'}</td>
@@ -3015,6 +3321,43 @@
                     </td>
                 `;
                 tbody.appendChild(row);
+
+                // Mobile card
+                const card = document.createElement('div');
+                card.className = 'mobile-card';
+                card.setAttribute('data-searchable', `${payment.tenant_name || ''} ${payment.property_address || ''} ${payment.payment_method}`);
+                card.innerHTML = `
+                    <div class="mobile-card-header">
+                        <div>
+                            <h3 class="mobile-card-title">${payment.tenant_name || 'N/A'}</h3>
+                            <div class="mobile-card-subtitle">${payment.property_address || 'N/A'}</div>
+                        </div>
+                        <span style="font-size: 1.2rem; font-weight: 600; color: #38a169;">${formatCurrency(payment.amount)}</span>
+                    </div>
+                    <div class="mobile-card-body">
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Date</span>
+                            <span class="mobile-card-value">${formatDate(payment.payment_date)}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Method</span>
+                            <span class="mobile-card-value">${payment.payment_method}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Check #</span>
+                            <span class="mobile-card-value">${payment.check_number || '-'}</span>
+                        </div>
+                        <div class="mobile-card-field">
+                            <span class="mobile-card-label">Status</span>
+                            <span class="mobile-card-value"><span class="status-badge ${statusClass}">${statusText}</span></span>
+                        </div>
+                    </div>
+                    <div class="mobile-card-actions">
+                        <button class="btn" onclick="openPaymentModal(${payment.id})">Edit</button>
+                        <button class="btn btn-danger" onclick="deletePayment(${payment.id})">Delete</button>
+                    </div>
+                `;
+                cardsContainer.appendChild(card);
             });
         }
 
@@ -3063,12 +3406,12 @@
         function filterTable(tableId, searchTerm) {
             const table = document.getElementById(tableId);
             const rows = table.getElementsByTagName('tr');
-            
+
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
                 const cells = row.getElementsByTagName('td');
                 let found = false;
-                
+
                 for (let j = 0; j < cells.length; j++) {
                     const cellText = cells[j].textContent.toLowerCase();
                     if (cellText.includes(searchTerm.toLowerCase())) {
@@ -3076,9 +3419,24 @@
                         break;
                     }
                 }
-                
+
                 row.style.display = found ? '' : 'none';
             }
+        }
+
+        function filterCards(cardsContainerId, searchTerm) {
+            const container = document.getElementById(cardsContainerId);
+            if (!container) return;
+
+            const cards = container.querySelectorAll('.mobile-card');
+            const term = searchTerm.toLowerCase();
+
+            cards.forEach(card => {
+                const searchable = card.getAttribute('data-searchable') || '';
+                const cardText = card.textContent.toLowerCase();
+                const found = searchable.toLowerCase().includes(term) || cardText.includes(term);
+                card.style.display = found ? '' : 'none';
+            });
         }
         
         // Report type toggle
