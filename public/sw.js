@@ -1,5 +1,5 @@
 // Service Worker for Property Management PWA
-const CACHE_NAME = 'property-management-v2.19.0';
+const CACHE_NAME = 'property-management-v2.20.0';
 const urlsToCache = [
   '/',
   '/index.html',

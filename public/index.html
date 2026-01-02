@@ -774,14 +774,23 @@
                         <option value="unpaidRent">Unpaid Rent Report</option>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="reportPeriodGroup">
                     <label>Report Period</label>
-                    <select id="reportPeriod">
+                    <select id="reportPeriod" onchange="toggleCustomDateRange()">
                         <option value="thisMonth">This Month</option>
                         <option value="lastMonth">Last Month</option>
                         <option value="thisYear">This Year</option>
                         <option value="allTime">All Time</option>
+                        <option value="custom">Custom Range</option>
                     </select>
+                </div>
+                <div class="form-group" id="customDateRangeGroup" style="display: none;">
+                    <label>From Date</label>
+                    <input type="date" id="reportStartDate">
+                </div>
+                <div class="form-group" id="customDateRangeEndGroup" style="display: none;">
+                    <label>To Date</label>
+                    <input type="date" id="reportEndDate">
                 </div>
                 <div class="form-group" id="reportTenantGroup" style="display: none;">
                     <label>Tenant</label>
@@ -3002,24 +3011,62 @@
             switch (period) {
                 case 'thisMonth':
                     startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-                    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
                     break;
                 case 'lastMonth':
                     startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                    endDate = new Date(today.getFullYear(), today.getMonth(), 0);
+                    endDate = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
                     break;
                 case 'thisYear':
                     startDate = new Date(today.getFullYear(), 0, 1);
-                    endDate = new Date(today.getFullYear(), 11, 31);
+                    endDate = new Date(today.getFullYear(), 11, 31, 23, 59, 59);
+                    break;
+                case 'custom':
+                    const customStart = document.getElementById('reportStartDate').value;
+                    const customEnd = document.getElementById('reportEndDate').value;
+                    if (customStart && customEnd) {
+                        startDate = new Date(customStart + 'T00:00:00');
+                        endDate = new Date(customEnd + 'T23:59:59');
+                    } else {
+                        // Default to all time if custom dates not set
+                        startDate = new Date(2000, 0, 1);
+                        endDate = new Date(2100, 11, 31, 23, 59, 59);
+                    }
                     break;
                 case 'allTime':
                 default:
                     startDate = new Date(2000, 0, 1);
-                    endDate = new Date(2100, 11, 31);
+                    endDate = new Date(2100, 11, 31, 23, 59, 59);
                     break;
             }
 
             return { startDate, endDate };
+        }
+
+        // Toggle custom date range inputs
+        function toggleCustomDateRange() {
+            const period = document.getElementById('reportPeriod').value;
+            const customStartGroup = document.getElementById('customDateRangeGroup');
+            const customEndGroup = document.getElementById('customDateRangeEndGroup');
+
+            if (period === 'custom') {
+                customStartGroup.style.display = 'block';
+                customEndGroup.style.display = 'block';
+                // Set default dates if not already set
+                const startInput = document.getElementById('reportStartDate');
+                const endInput = document.getElementById('reportEndDate');
+                if (!startInput.value) {
+                    const today = new Date();
+                    const firstOfYear = new Date(today.getFullYear(), 0, 1);
+                    startInput.value = firstOfYear.toISOString().split('T')[0];
+                }
+                if (!endInput.value) {
+                    endInput.value = new Date().toISOString().split('T')[0];
+                }
+            } else {
+                customStartGroup.style.display = 'none';
+                customEndGroup.style.display = 'none';
+            }
         }
 
         // Generate Unpaid Rent Report
