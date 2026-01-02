@@ -3008,35 +3008,42 @@
             const today = new Date();
             let startDate, endDate;
 
+            // Use UTC dates to match database storage
+            const utcYear = today.getUTCFullYear();
+            const utcMonth = today.getUTCMonth();
+
             switch (period) {
                 case 'thisMonth':
-                    startDate = new Date(today.getFullYear(), today.getMonth(), 1);
-                    endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59);
+                    startDate = new Date(Date.UTC(utcYear, utcMonth, 1, 0, 0, 0));
+                    endDate = new Date(Date.UTC(utcYear, utcMonth + 1, 0, 23, 59, 59));
                     break;
                 case 'lastMonth':
-                    startDate = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-                    endDate = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59);
+                    startDate = new Date(Date.UTC(utcYear, utcMonth - 1, 1, 0, 0, 0));
+                    endDate = new Date(Date.UTC(utcYear, utcMonth, 0, 23, 59, 59));
                     break;
                 case 'thisYear':
-                    startDate = new Date(today.getFullYear(), 0, 1);
-                    endDate = new Date(today.getFullYear(), 11, 31, 23, 59, 59);
+                    startDate = new Date(Date.UTC(utcYear, 0, 1, 0, 0, 0));
+                    endDate = new Date(Date.UTC(utcYear, 11, 31, 23, 59, 59));
                     break;
                 case 'custom':
                     const customStart = document.getElementById('reportStartDate').value;
                     const customEnd = document.getElementById('reportEndDate').value;
                     if (customStart && customEnd) {
-                        startDate = new Date(customStart + 'T00:00:00');
-                        endDate = new Date(customEnd + 'T23:59:59');
+                        // Parse custom dates as UTC
+                        const [startYear, startMonth, startDay] = customStart.split('-').map(Number);
+                        const [endYear, endMonth, endDay] = customEnd.split('-').map(Number);
+                        startDate = new Date(Date.UTC(startYear, startMonth - 1, startDay, 0, 0, 0));
+                        endDate = new Date(Date.UTC(endYear, endMonth - 1, endDay, 23, 59, 59));
                     } else {
                         // Default to all time if custom dates not set
-                        startDate = new Date(2000, 0, 1);
-                        endDate = new Date(2100, 11, 31, 23, 59, 59);
+                        startDate = new Date(Date.UTC(2000, 0, 1, 0, 0, 0));
+                        endDate = new Date(Date.UTC(2100, 11, 31, 23, 59, 59));
                     }
                     break;
                 case 'allTime':
                 default:
-                    startDate = new Date(2000, 0, 1);
-                    endDate = new Date(2100, 11, 31, 23, 59, 59);
+                    startDate = new Date(Date.UTC(2000, 0, 1, 0, 0, 0));
+                    endDate = new Date(Date.UTC(2100, 11, 31, 23, 59, 59));
                     break;
             }
 
