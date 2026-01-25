@@ -172,10 +172,11 @@ async function createTables() {
     `);
 
     // Migrate data from old 'address' column to new fields if address column exists
+    // Using dynamic SQL because SQL Server validates column names at parse time
     await pool.request().query(`
         IF EXISTS (SELECT * FROM sys.columns WHERE object_id = OBJECT_ID('properties') AND name = 'address')
         BEGIN
-            UPDATE properties SET address1 = address WHERE address1 IS NULL AND address IS NOT NULL
+            EXEC('UPDATE properties SET address1 = address WHERE address1 IS NULL AND address IS NOT NULL')
             UPDATE properties SET city = '' WHERE city IS NULL
             UPDATE properties SET state = '' WHERE state IS NULL
             UPDATE properties SET zip = '' WHERE zip IS NULL
